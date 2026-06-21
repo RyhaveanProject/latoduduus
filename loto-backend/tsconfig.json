@@ -2,13 +2,12 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2021",
-    "lib": ["ES2021"],
+    "lib": [
+      "ES2021"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
-    "strict": false,
-    "strictPropertyInitialization": false,
-    "strictNullChecks": false,
-    "noImplicitAny": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -21,12 +20,28 @@
     "experimentalDecorators": true,
     "baseUrl": "./src",
     "paths": {
-      "@/*": ["*"],
-      "@modules/*": ["modules/*"],
-      "@common/*": ["common/*"],
-      "@config/*": ["config/*"]
-    }
+      "@/*": [
+        "*"
+      ],
+      "@modules/*": [
+        "modules/*"
+      ],
+      "@common/*": [
+        "common/*"
+      ],
+      "@config/*": [
+        "config/*"
+      ]
+    },
+    "strictPropertyInitialization": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*spec.ts"
+  ]
 }
