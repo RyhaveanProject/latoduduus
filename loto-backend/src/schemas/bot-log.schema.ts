@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, SchemaTypes } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
 export type BotLogDocument = BotLog & Document;
@@ -9,7 +9,6 @@ export class BotLog {
   @Prop({
     type: String,
     default: () => uuidv4(),
-    unique: true,
   })
   _id!: string;
 
@@ -37,7 +36,8 @@ export class BotLog {
   @Prop()
   callbackData?: string;
 
-  @Prop()
+  // Xətanın qarşısını almaq üçün tip göstərildi
+  @Prop({ type: SchemaTypes.Mixed })
   metadata?: Record<string, any>;
 
   @Prop({ default: 'success', enum: ['success', 'error'] })
@@ -46,11 +46,8 @@ export class BotLog {
   @Prop()
   errorMessage?: string;
 
-  @Prop()
-  createdAt!: Date;
-
-  @Prop()
-  updatedAt!: Date;
+  // timestamps: true olduğu üçün aşağıdakıları sildim, 
+  // çünki Mongoose bunları avtomatik idarə edir.
 }
 
 export const BotLogSchema = SchemaFactory.createForClass(BotLog);
