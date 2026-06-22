@@ -59,6 +59,9 @@ async function bootstrap() {
     app.useGlobalInterceptors(new TransformInterceptor());
     console.log('--- Global Pipes/Filters/Interceptors quraşdırıldı ---');
 
+    // Health Check endpointi (Render-in Dockerfile HEALTHCHECK üçün vacibdir)
+    app.use('/health', (req, res) => res.status(200).send('OK'));
+
     if (nodeEnv !== 'production') {
       const config = new DocumentBuilder()
         .setTitle('Loto Backend API')
@@ -72,14 +75,17 @@ async function bootstrap() {
       console.log('--- Swagger quraşdırıldı ---');
     }
 
+    // Botu əvvəlcə işə salırıq
+    const telegramService = app.get(TelegramService, { strict: false });
+    if (telegramService) {
+      console.log('--- Telegram botu başlatılır... ---');
+      await telegramService.startBot(); 
+      console.log('--- Telegram botu işə düşdü ---');
+    }
+
     console.log(`--- Listen əmri çağırılır (port: ${port}) ---`);
     await app.listen(port, '0.0.0.0');
     console.log(`🚀 Server uğurla işə düşdü və ${port} portunda dinləyir!`);
-
-    const telegramService = app.get(TelegramService, { strict: false });
-    if (telegramService) {
-      void telegramService.startBot();
-    }
 
   } catch (error) {
     console.error('--- XƏTA BAŞ VERDİ: ---', error);
