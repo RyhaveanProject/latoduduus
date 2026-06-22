@@ -8,6 +8,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AppModule } from './app.module';
 
+// 'compression' kitabxanası üçün CommonJS require istifadə edilir
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const compression = require('compression');
 
@@ -18,13 +19,15 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   
-  // Render-in təyin etdiyi PORT-u götürmək üçün əsaslı yoxlanış
+  // Render-in təyin etdiyi PORT-u prioritet tuturuq
   const port = Number(process.env.PORT ?? configService.get<string>('PORT') ?? 3000);
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
 
+  // Security middleware
   app.use(helmet());
   app.use(compression());
 
+  // Global rate limiting
   app.use(
     rateLimit({
       windowMs: configService.get<number>('RATE_LIMIT_WINDOW_MS', 900000),
@@ -38,6 +41,7 @@ async function bootstrap() {
     }),
   );
 
+  // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -49,9 +53,13 @@ async function bootstrap() {
     }),
   );
 
+  // Global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Global interceptor
   app.useGlobalInterceptors(new TransformInterceptor());
 
+  // Swagger documentation
   if (nodeEnv !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('Loto Backend API')
@@ -64,10 +72,11 @@ async function bootstrap() {
     SwaggerModule.setup('docs', app, document);
   }
 
+  // Render üçün '0.0.0.0' vacibdir
   await app.listen(port, '0.0.0.0');
 
-  console.log(`Server running on port ${port}`);
-  console.log(`Environment: ${nodeEnv}`);
+  console.log(`🚀 Server is running on port ${port}`);
+  console.log(`🔧 Environment: ${nodeEnv}`);
 }
 
 bootstrap();
