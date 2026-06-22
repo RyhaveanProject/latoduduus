@@ -7,9 +7,10 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start
     envVars:
+      # !! BU DƏYƏRLƏRİ ÖZ RENDER BACKEND URL-İNİZLƏ ƏVƏZLƏYİN !!
       - key: NEXT_PUBLIC_API_URL
-        value: https://YOUR-BACKEND.onrender.com/api
+        value: https://loto-backend.onrender.com/api
       - key: NEXT_PUBLIC_SOCKET_URL
-        value: https://YOUR-BACKEND.onrender.com
+        value: https://loto-backend.onrender.com
       - key: NODE_VERSION
         value: 20
