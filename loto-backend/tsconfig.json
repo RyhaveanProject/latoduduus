@@ -1,32 +1,48 @@
-import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
-import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { User, UserSchema } from '@/schemas/user.schema';
-import { JwtStrategy } from '@/strategies/jwt.strategy';
-import { GoogleStrategy } from '@/strategies/strategies/google.strategy'; 
-// QEYD: Əgər faylınız src/strategies/google.strategy-dədirsə, aşağıdakını istifadə edin:
-// import { GoogleStrategy } from '@/strategies/google.strategy';
-
-@Module({
-  imports: [
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-    PassportModule,
-    JwtModule.registerAsync({
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'secret'),
-        signOptions: {
-          expiresIn: configService.get<string>('JWT_EXPIRATION', '1h') as any,
-        },
-      }),
-      inject: [ConfigService],
-    }),
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "lib": [
+      "ES2021"
+    ],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": [
+        "*"
+      ],
+      "@modules/*": [
+        "modules/*"
+      ],
+      "@common/*": [
+        "common/*"
+      ],
+      "@config/*": [
+        "config/*"
+      ]
+    },
+    "strictPropertyInitialization": false
+  },
+  "include": [
+    "src/**/*"
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleStrategy],
-  exports: [AuthService, JwtModule],
-})
-export class AuthModule {}
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*spec.ts"
+  ]
+}
