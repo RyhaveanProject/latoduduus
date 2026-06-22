@@ -8,75 +8,77 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AppModule } from './app.module';
 
-// 'compression' kitabxanası üçün CommonJS require istifadə edilir
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const compression = require('compression');
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    cors: true,
-  });
+  console.log('--- Bootstrap prosesi başlayır ---');
 
-  const configService = app.get(ConfigService);
-  
-  // Render-in təyin etdiyi PORT-u prioritet tuturuq
-  const port = Number(process.env.PORT ?? configService.get<string>('PORT') ?? 3000);
-  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  try {
+    const app = await NestFactory.create(AppModule, {
+      cors: true,
+    });
+    console.log('--- Nest Application yaradıldı ---');
 
-  // Security middleware
-  app.use(helmet());
-  app.use(compression());
+    const configService = app.get(ConfigService);
+    const port = Number(process.env.PORT ?? configService.get<string>('PORT') ?? 3000);
+    const nodeEnv = configService.get<string>('NODE_ENV', 'development');
 
-  // Global rate limiting
-  app.use(
-    rateLimit({
-      windowMs: configService.get<number>('RATE_LIMIT_WINDOW_MS', 900000),
-      max: configService.get<number>('RATE_LIMIT_MAX_REQUESTS', 100),
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: {
-        statusCode: 429,
-        message: 'Too many requests, please try again later.',
-      },
-    }),
-  );
+    console.log(`--- Konfiqurasiya oxundu, port: ${port}, env: ${nodeEnv} ---`);
 
-  // Global validation pipe
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    }),
-  );
+    app.use(helmet());
+    app.use(compression());
+    console.log('--- Middleware-lər əlavə edildi ---');
 
-  // Global exception filter
-  app.useGlobalFilters(new AllExceptionsFilter());
+    app.use(
+      rateLimit({
+        windowMs: configService.get<number>('RATE_LIMIT_WINDOW_MS', 900000),
+        max: configService.get<number>('RATE_LIMIT_MAX_REQUESTS', 100),
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: {
+          statusCode: 429,
+          message: 'Too many requests, please try again later.',
+        },
+      }),
+    );
+    console.log('--- Rate Limit əlavə edildi ---');
 
-  // Global interceptor
-  app.useGlobalInterceptors(new TransformInterceptor());
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: {
+          enableImplicitConversion: true,
+        },
+      }),
+    );
+    app.useGlobalFilters(new AllExceptionsFilter());
+    app.useGlobalInterceptors(new TransformInterceptor());
+    console.log('--- Global Pipes/Filters/Interceptors quraşdırıldı ---');
 
-  // Swagger documentation
-  if (nodeEnv !== 'production') {
-    const config = new DocumentBuilder()
-      .setTitle('Loto Backend API')
-      .setDescription('Russian Lotto Game Backend API Documentation')
-      .setVersion('1.0.0')
-      .addBearerAuth()
-      .build();
+    if (nodeEnv !== 'production') {
+      const config = new DocumentBuilder()
+        .setTitle('Loto Backend API')
+        .setDescription('Russian Lotto Game Backend API Documentation')
+        .setVersion('1.0.0')
+        .addBearerAuth()
+        .build();
 
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('docs', app, document);
+      const document = SwaggerModule.createDocument(app, config);
+      SwaggerModule.setup('docs', app, document);
+      console.log('--- Swagger quraşdırıldı ---');
+    }
+
+    console.log(`--- Listen əmri çağırılır (port: ${port}) ---`);
+    await app.listen(port, '0.0.0.0');
+    console.log(`🚀 Server uğurla işə düşdü və ${port} portunda dinləyir!`);
+
+  } catch (error) {
+    console.error('--- XƏTA BAŞ VERDİ: ---', error);
+    process.exit(1);
   }
-
-  // Render üçün '0.0.0.0' vacibdir
-  await app.listen(port, '0.0.0.0');
-
-  console.log(`🚀 Server is running on port ${port}`);
-  console.log(`🔧 Environment: ${nodeEnv}`);
 }
 
 bootstrap();
