@@ -26,9 +26,14 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      const user = await login(email, password);
       push('Welcome back', 'success');
-      router.push('/dashboard');
+      // Admin rolunda olanlar admin panelə, istifadəçilər dashboard-a
+      if (user.role === 'admin' || user.role === 'superadmin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || 'Invalid credentials');
