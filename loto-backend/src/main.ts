@@ -2,12 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
-import * as compression from 'compression';
-import { rateLimit } from 'express-rate-limit';
 import { ConfigService } from '@nestjs/config';
+import { rateLimit } from 'express-rate-limit';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AppModule } from './app.module';
+
+// 'compression' kitabxanası üçün CommonJS require istifadə edilir 
+// ki, production mühitində "compression is not a function" xətası yaranmasın.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const compression = require('compression');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
