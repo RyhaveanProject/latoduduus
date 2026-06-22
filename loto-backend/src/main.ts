@@ -57,6 +57,10 @@ async function bootstrap() {
     });
     console.log('--- Nest Application yaradıldı ---');
 
+    // MÜHÜM DƏYİŞİKLİK: Bütün yolların əvvəlinə 'api' prefiksini əlavə edirik
+    app.setGlobalPrefix('api');
+    console.log('--- Global Prefix /api təyin edildi ---');
+
     const configService = app.get(ConfigService);
     const port = Number(process.env.PORT ?? configService.get<string>('PORT') ?? 3000);
     const nodeEnv = configService.get<string>('NODE_ENV', 'development');
