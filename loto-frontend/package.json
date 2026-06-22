@@ -5,10 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static"
+    "start": "next start -p $PORT",
+    "lint": "next lint"
   },
   "dependencies": {
     "next": "15.1.4",
@@ -29,7 +27,6 @@
     "postcss": "^8.4.49",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.17.0",
-    "eslint-config-next": "15.1.4",
-    "@cloudflare/next-on-pages": "^1.13.7"
+    "eslint-config-next": "15.1.4"
   }
 }
