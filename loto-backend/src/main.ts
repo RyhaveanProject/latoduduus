@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Request, Response } from 'express'; // Tip xətasını aradan qaldırmaq üçün
 import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
 import { rateLimit } from 'express-rate-limit';
@@ -31,6 +32,9 @@ async function bootstrap() {
     app.use(compression());
     console.log('--- Middleware-lər əlavə edildi ---');
 
+    // Health Check endpointi (Dockerfile-dakı yoxlanış üçün)
+    app.use('/health', (req: Request, res: Response) => res.status(200).send('OK'));
+
     app.use(
       rateLimit({
         windowMs: configService.get<number>('RATE_LIMIT_WINDOW_MS', 900000),
@@ -59,9 +63,6 @@ async function bootstrap() {
     app.useGlobalInterceptors(new TransformInterceptor());
     console.log('--- Global Pipes/Filters/Interceptors quraşdırıldı ---');
 
-    // Health Check endpointi (Render-in Dockerfile HEALTHCHECK üçün vacibdir)
-    app.use('/health', (req, res) => res.status(200).send('OK'));
-
     if (nodeEnv !== 'production') {
       const config = new DocumentBuilder()
         .setTitle('Loto Backend API')
@@ -75,12 +76,12 @@ async function bootstrap() {
       console.log('--- Swagger quraşdırıldı ---');
     }
 
-    // Botu əvvəlcə işə salırıq
+    // Botu işə salmağı listen-dən əvvələ çəkdik, lakin try-catch ilə qoruduq
     const telegramService = app.get(TelegramService, { strict: false });
     if (telegramService) {
       console.log('--- Telegram botu başlatılır... ---');
-      await telegramService.startBot(); 
-      console.log('--- Telegram botu işə düşdü ---');
+      // Əgər bu funksiya bloklayıcıdırsa, await-i silib sadəcə telegramService.startBot() çağır
+      await telegramService.startBot().catch(err => console.error('Bot başlatılarkən xəta:', err));
     }
 
     console.log(`--- Listen əmri çağırılır (port: ${port}) ---`);
