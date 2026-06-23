@@ -20,6 +20,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 
 const BOT_REFRESH_MS = 15 * 60 * 1000;
+const ROOM_CAPACITY = 6;
 const PRESET_ROOMS = [
   { name: 'Taxta 1', entryFee: 1 },
   { name: 'Taxta 5', entryFee: 5 },
@@ -31,6 +32,7 @@ const BOT_NAMES = [
   'Aysu', 'Turan', 'Kamran', 'Nigar', 'Elvin', 'Selin', 'Baran', 'Ece', 'Deniz',
   'Artem', 'Sasha', 'Mila', 'Dima', 'Vika', 'Timur', 'Luna', 'Mason', 'Oliver',
   'Emily', 'Noah', 'Ariana', 'Denis', 'Yusif', 'Rauf', 'Leyla', 'Polina', 'Nikita',
+  'Kamal', 'Aylin', 'Murad', 'Leman', 'Ruslan', 'Nelli', 'Zaur', 'Fidan', 'Rena',
 ];
 
 @Injectable()
@@ -52,10 +54,12 @@ export class RoomsService {
       botProfiles: [],
       currentPlayers: 0,
       entryFee: createRoomDto.entryFee,
-      maxPlayers: 6,
+      maxPlayers: ROOM_CAPACITY,
       requiresVerification: createRoomDto.requiresVerification || false,
       status: 'waiting',
       isSystemRoom: false,
+      countdownStartedAt: undefined,
+      countdownEndsAt: undefined,
     });
 
     await room.save();
@@ -94,10 +98,12 @@ export class RoomsService {
     await this.ensureBotRoster(room, true);
 
     room.players.push(userId);
-    room.status = 'active';
     room.botProfiles = this.trimBotsToCapacity(room.botProfiles, room.maxPlayers - room.players.length);
     room.currentPlayers = room.players.length + room.botProfiles.length;
     room.totalPrizePool = room.currentPlayers * room.entryFee;
+    room.status = room.currentPlayers > 0 ? 'countdown' : 'waiting';
+    room.countdownStartedAt = undefined;
+    room.countdownEndsAt = undefined;
 
     await room.save();
     return this.mapRoomToDto(room);
@@ -117,7 +123,9 @@ export class RoomsService {
     }
 
     if (!room.currentGameId) {
-      room.status = 'waiting';
+      room.status = room.players.length > 0 ? 'countdown' : 'waiting';
+      room.countdownStartedAt = undefined;
+      room.countdownEndsAt = undefined;
       await this.ensureBotRoster(room, true);
     }
 
@@ -222,7 +230,7 @@ export class RoomsService {
     }
 
     if (updateRoomDto.maxPlayers && updateRoomDto.maxPlayers >= 2) {
-      room.maxPlayers = 6;
+      room.maxPlayers = ROOM_CAPACITY;
     }
 
     if (updateRoomDto.status) {
@@ -252,14 +260,63 @@ export class RoomsService {
     }
 
     room.currentGameId = gameId || undefined;
-    room.status = gameId ? 'active' : 'waiting';
+    room.status = gameId ? 'active' : room.players.length > 0 ? 'countdown' : 'waiting';
     if (!gameId) {
       room.totalPrizePool = 0;
+      room.countdownStartedAt = undefined;
+      room.countdownEndsAt = undefined;
       await this.ensureBotRoster(room, true);
     } else {
       room.totalPrizePool = (room.players.length + room.botProfiles.length) * room.entryFee;
     }
     room.currentPlayers = room.players.length + room.botProfiles.length;
+    await room.save();
+  }
+
+  async startCountdown(roomId: string, seconds: number = 10): Promise<RoomDto> {
+    const room = await this.roomModel.findById(roomId);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    await this.ensureBotRoster(room, true);
+
+    if (room.currentGameId) {
+      return this.mapRoomToDto(room);
+    }
+
+    if (room.players.length === 0) {
+      room.status = 'waiting';
+      room.countdownStartedAt = undefined;
+      room.countdownEndsAt = undefined;
+      room.totalPrizePool = 0;
+      await room.save();
+      return this.mapRoomToDto(room);
+    }
+
+    const startedAt = new Date();
+    const endsAt = new Date(startedAt.getTime() + seconds * 1000);
+    room.status = 'countdown';
+    room.countdownStartedAt = startedAt;
+    room.countdownEndsAt = endsAt;
+    room.currentPlayers = room.players.length + room.botProfiles.length;
+    room.totalPrizePool = room.currentPlayers * room.entryFee;
+    await room.save();
+
+    return this.mapRoomToDto(room);
+  }
+
+  async clearCountdown(roomId: string): Promise<void> {
+    const room = await this.roomModel.findById(roomId);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    room.countdownStartedAt = undefined;
+    room.countdownEndsAt = undefined;
+    if (!room.currentGameId) {
+      room.status = room.players.length > 0 ? 'countdown' : 'waiting';
+    }
     await room.save();
   }
 
@@ -276,8 +333,18 @@ export class RoomsService {
     for (const preset of PRESET_ROOMS) {
       const existing = await this.roomModel.findOne({ name: preset.name, isSystemRoom: true });
       if (existing) {
-        if (existing.maxPlayers !== 6) {
-          existing.maxPlayers = 6;
+        let changed = false;
+        if (existing.maxPlayers !== ROOM_CAPACITY) {
+          existing.maxPlayers = ROOM_CAPACITY;
+          changed = true;
+        }
+        if (!existing.botProfiles?.length) {
+          existing.botProfiles = this.generateBots(4, 5);
+          existing.botRosterUpdatedAt = new Date();
+          changed = true;
+        }
+        if (changed) {
+          existing.currentPlayers = existing.players.length + existing.botProfiles.length;
           await existing.save();
         }
         continue;
@@ -292,7 +359,7 @@ export class RoomsService {
         spectators: [],
         messages: [],
         entryFee: preset.entryFee,
-        maxPlayers: 6,
+        maxPlayers: ROOM_CAPACITY,
         currentPlayers: 4,
         status: 'waiting',
         totalPrizePool: 0,
@@ -312,26 +379,39 @@ export class RoomsService {
 
     const now = Date.now();
     const last = room.botRosterUpdatedAt ? new Date(room.botRosterUpdatedAt).getTime() : 0;
-    const shouldRefresh =
-      force ||
-      !room.botProfiles?.length ||
-      (!room.currentGameId && now - last >= BOT_REFRESH_MS);
+    const aliasesExpired = now - last >= BOT_REFRESH_MS;
+    const capacity = Math.max(0, room.maxPlayers - room.players.length);
 
-    if (shouldRefresh && !room.currentGameId) {
+    if ((!room.botProfiles?.length || force) && !room.currentGameId) {
       const minBots = room.players.length > 0 ? 3 : 4;
-      const maxBots = room.players.length > 0 ? 5 : 5;
-      const capacity = Math.max(0, room.maxPlayers - room.players.length);
+      const maxBots = 5;
       const desired = Math.min(capacity, this.randomBetween(minBots, maxBots));
       room.botProfiles = this.generateBots(desired, desired);
       room.botRosterUpdatedAt = new Date();
       room.currentPlayers = room.players.length + room.botProfiles.length;
-      room.totalPrizePool = 0;
+      room.totalPrizePool = room.currentGameId ? room.currentPlayers * room.entryFee : 0;
       await room.save();
       return;
     }
 
-    room.botProfiles = this.trimBotsToCapacity(room.botProfiles || [], room.maxPlayers - room.players.length);
+    if (aliasesExpired && room.botProfiles?.length) {
+      if (room.currentGameId) {
+        room.botProfiles = room.botProfiles.map((bot) => ({ ...bot, name: this.generateBotName() }));
+      } else {
+        const desired = Math.min(capacity, Math.max(3, room.botProfiles.length));
+        room.botProfiles = this.generateBots(desired, desired);
+      }
+      room.botRosterUpdatedAt = new Date();
+      await room.save();
+    }
+
+    room.botProfiles = this.trimBotsToCapacity(room.botProfiles || [], capacity);
     room.currentPlayers = room.players.length + room.botProfiles.length;
+    if (!room.currentGameId && room.players.length === 0) {
+      room.status = 'waiting';
+      room.countdownStartedAt = undefined;
+      room.countdownEndsAt = undefined;
+    }
     if (force) {
       await room.save();
     }
@@ -362,6 +442,11 @@ export class RoomsService {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  private toHumanEmail(name: string): string {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') || 'player';
+    return `${slug}@mail.com`;
+  }
+
   private async buildPlayers(room: RoomDocument): Promise<RoomPlayerDto[]> {
     const users = room.players.length
       ? await this.userModel.find({ _id: { $in: room.players } }).select('email firstName avatar balance gamesWon')
@@ -382,7 +467,7 @@ export class RoomsService {
 
     const bots: RoomPlayerDto[] = (room.botProfiles || []).map((bot) => ({
       id: bot.id,
-      email: `${bot.name.toLowerCase().replace(/\s+/g, '.')}@bot.local`,
+      email: this.toHumanEmail(bot.name),
       firstName: bot.name,
       avatar: bot.avatar,
       balance: 0,
@@ -406,9 +491,12 @@ export class RoomsService {
       maxPlayers: room.maxPlayers,
       currentPlayers: players.length,
       status: room.status,
-      totalPrizePool: room.currentGameId ? players.length * room.entryFee : 0,
+      totalPrizePool: room.currentGameId || room.status === 'countdown' ? players.length * room.entryFee : 0,
       messages: room.messages,
       currentGameId: room.currentGameId,
+      countdownStartedAt: room.countdownStartedAt,
+      countdownEndsAt: room.countdownEndsAt,
+      lastWinnerName: room.lastWinnerName,
       createdAt: room.createdAt,
     };
   }
