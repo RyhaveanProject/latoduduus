@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
 import { AdminAPI } from '@/lib/api';
 import { AdminStats } from '@/types';
-import { IconUsers, IconDeposit, IconWithdraw, IconTicket } from '@/components/icons';
+import { IconUsers, IconDeposit, IconWithdraw, IconTicket, IconBan, IconCoin } from '@/components/icons';
+import { formatMoney } from '@/lib/utils';
 
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -16,15 +17,17 @@ export default function AdminOverviewPage() {
 
   const cards = [
     { label: 'Total users', value: stats?.totalUsers ?? '—', icon: IconUsers },
-    { label: 'Active games', value: stats?.activeGames ?? '—', icon: IconTicket },
+    { label: 'Active games', value: stats?.totalActiveGames ?? '—', icon: IconTicket },
     { label: 'Pending deposits', value: stats?.pendingDeposits ?? '—', icon: IconDeposit },
     { label: 'Pending withdraws', value: stats?.pendingWithdraws ?? '—', icon: IconWithdraw },
+    { label: 'Blocked users', value: stats?.bannedUsers ?? '—', icon: IconBan },
+    { label: 'Net revenue', value: typeof stats?.totalRevenue === 'number' ? formatMoney(stats.totalRevenue, 'USD') : '—', icon: IconCoin },
   ];
 
   return (
     <div className="space-y-6">
       <h1 className="font-display text-xl font-bold text-gold-100">Admin overview</h1>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((c) => (
           <GlassCard key={c.label} className="flex items-center gap-4 p-5">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-ruby-500/10 text-ruby-400">
