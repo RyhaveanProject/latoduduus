@@ -1,6 +1,6 @@
 'use client';
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/Button';
 import { Avatar } from '@/components/Avatar';
@@ -10,14 +10,9 @@ import { getLocaleMeta } from '@/lib/locale-config';
 import { formatMoney } from '@/lib/utils';
 import { RoomsAPI, GamesAPI } from '@/lib/api';
 import { connectSocket, disconnectSocket, SOCKET_EVENTS } from '@/lib/socket';
-import { Room, RoomMessage, Game, GameTicket } from '@/types';
+import { Room, Game, GameTicket } from '@/types';
 import { useToast } from '@/components/Toast';
-import { IconUsers, IconChat, IconEye, IconCrown, IconCoin } from '@/components/icons';
-import { cn } from '@/lib/utils';
-
-const COLUMN_RANGES = [
-  [1, 9], [10, 19], [20, 29], [30, 39], [40, 49], [50, 59], [60, 69], [70, 79], [80, 90],
-];
+import { IconCoin, IconUsers } from '@/components/icons';
 
 export default function GameRoomPage() {
   return (
@@ -29,7 +24,7 @@ export default function GameRoomPage() {
 
 function GameRoomContent() {
   const searchParams = useSearchParams();
-  const id = searchParams.get('roomId') || '';
+  const roomId = searchParams.get('roomId') || '';
   const router = useRouter();
   const { t, locale } = useI18n();
   const { user } = useAuthStore();
@@ -38,243 +33,273 @@ function GameRoomContent() {
 
   const [room, setRoom] = useState<Room | null>(null);
   const [game, setGame] = useState<Game | null>(null);
-  const [ticket, setTicket] = useState<GameTicket | null>(null);
-  const [messages, setMessages] = useState<RoomMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [spectator, setSpectator] = useState(false);
+  const [tickets, setTickets] = useState<GameTicket[]>([]);
   const [loading, setLoading] = useState(true);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [soundOn, setSoundOn] = useState(true);
+  const [marking, setMarking] = useState<string | null>(null);
 
-  const isInRoom = !!room?.players?.some((p) => p.id === user?.id);
+  const isJoined = !!room?.players?.some((player) => player.id === user?.id && !player.isBot);
+  const visiblePlayers = room?.players ?? [];
+  const lastDraws = useMemo(() => (game?.drawnNumbers ?? []).slice(-3).reverse(), [game?.drawnNumbers]);
 
   const loadRoom = useCallback(async () => {
+    if (!roomId) return;
     try {
-      const r = (await RoomsAPI.get(id)) as Room;
-      setRoom(r);
+      const response = (await RoomsAPI.get(roomId)) as Room;
+      setRoom(response);
+      if (response.currentGameId) {
+        const currentGame = (await GamesAPI.get(response.currentGameId)) as Game;
+        setGame(currentGame);
+        if (user?.id) {
+          const myTickets = (await GamesAPI.myTickets(response.currentGameId)) as GameTicket[];
+          setTickets(myTickets);
+        }
+      }
     } catch {
-      push('Room not found', 'error');
+      push('Otaq tapılmadı', 'error');
       router.push('/dashboard');
     } finally {
       setLoading(false);
     }
-  }, [id, push, router]);
+  }, [roomId, push, router, user?.id]);
+
+  const loadMyTickets = useCallback(async (gameId: string) => {
+    if (!user?.id) return;
+    try {
+      const myTickets = (await GamesAPI.myTickets(gameId)) as GameTicket[];
+      setTickets(myTickets);
+    } catch {
+      // ignore silent refresh errors
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     loadRoom();
   }, [loadRoom]);
 
   useEffect(() => {
-    const socket = connectSocket();
-    socket.emit(SOCKET_EVENTS.JOIN_ROOM, { roomId: id });
+    if (!user?.id || !roomId) return;
+    const socket = connectSocket(user.id);
 
-    socket.on(SOCKET_EVENTS.ROOM_UPDATED, (data: Room) => setRoom(data));
-    socket.on(SOCKET_EVENTS.PLAYER_JOINED, () => loadRoom());
-    socket.on(SOCKET_EVENTS.PLAYER_LEFT, () => loadRoom());
-    socket.on(SOCKET_EVENTS.MESSAGE, (msg: RoomMessage) => setMessages((m) => [...m, msg]));
-    socket.on(SOCKET_EVENTS.GAME_STARTED, (g: Game) => setGame(g));
-    socket.on(SOCKET_EVENTS.NUMBER_DRAWN, (g: Game) => setGame(g));
-    socket.on(SOCKET_EVENTS.GAME_COMPLETED, (g: Game) => {
-      setGame(g);
-      push('Game completed', 'info');
-    });
-    socket.on(SOCKET_EVENTS.TICKET_UPDATED, (tk: GameTicket) => setTicket(tk));
-    socket.on(SOCKET_EVENTS.ERROR, (err: { message?: string }) => push(err?.message || 'Connection error', 'error'));
+    const onRoomUpdated = (nextRoom: Room) => setRoom(nextRoom);
+    const onGameStarted = (nextGame: Game) => {
+      setGame(nextGame);
+      loadMyTickets(nextGame.id);
+    };
+    const onNumberDrawn = (nextGame: Game) => setGame(nextGame);
+    const onTicketUpdated = (nextTickets: GameTicket[]) => setTickets(nextTickets);
+    const onCompleted = (nextGame: Game) => {
+      setGame(nextGame);
+      loadMyTickets(nextGame.id);
+      push(nextGame.winnerType === 'real' ? 'Oyunda qalib var' : 'Bot qalib gəldi', 'info');
+    };
+    const onError = (err: { message?: string }) => push(err?.message || 'Socket xətası', 'error');
+
+    socket.emit(SOCKET_EVENTS.JOIN_ROOM, { roomId });
+    socket.on(SOCKET_EVENTS.ROOM_UPDATED, onRoomUpdated);
+    socket.on(SOCKET_EVENTS.GAME_STARTED, onGameStarted);
+    socket.on(SOCKET_EVENTS.NUMBER_DRAWN, onNumberDrawn);
+    socket.on(SOCKET_EVENTS.TICKET_UPDATED, onTicketUpdated);
+    socket.on(SOCKET_EVENTS.GAME_COMPLETED, onCompleted);
+    socket.on(SOCKET_EVENTS.ERROR, onError);
 
     return () => {
-      socket.emit(SOCKET_EVENTS.LEAVE_ROOM, { roomId: id });
-      socket.off(SOCKET_EVENTS.ROOM_UPDATED);
-      socket.off(SOCKET_EVENTS.PLAYER_JOINED);
-      socket.off(SOCKET_EVENTS.PLAYER_LEFT);
-      socket.off(SOCKET_EVENTS.MESSAGE);
-      socket.off(SOCKET_EVENTS.GAME_STARTED);
-      socket.off(SOCKET_EVENTS.NUMBER_DRAWN);
-      socket.off(SOCKET_EVENTS.GAME_COMPLETED);
-      socket.off(SOCKET_EVENTS.TICKET_UPDATED);
-      socket.off(SOCKET_EVENTS.ERROR);
+      socket.emit(SOCKET_EVENTS.LEAVE_ROOM, { roomId });
+      socket.off(SOCKET_EVENTS.ROOM_UPDATED, onRoomUpdated);
+      socket.off(SOCKET_EVENTS.GAME_STARTED, onGameStarted);
+      socket.off(SOCKET_EVENTS.NUMBER_DRAWN, onNumberDrawn);
+      socket.off(SOCKET_EVENTS.TICKET_UPDATED, onTicketUpdated);
+      socket.off(SOCKET_EVENTS.GAME_COMPLETED, onCompleted);
+      socket.off(SOCKET_EVENTS.ERROR, onError);
       disconnectSocket();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [loadMyTickets, push, roomId, user?.id]);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const join = async () => {
+  const joinRoom = async () => {
     try {
-      await RoomsAPI.join({ roomId: id });
-      await loadRoom();
-      push('Joined room', 'success');
+      const joinedRoom = (await RoomsAPI.join({ roomId })) as Room;
+      setRoom(joinedRoom);
+      connectSocket(user?.id).emit(SOCKET_EVENTS.JOIN_ROOM, { roomId });
+      push('Otağa qoşuldunuz, oyun başlayır', 'success');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      push(msg || 'Could not join room', 'error');
+      push(msg || 'Otağa qoşulmaq olmadı', 'error');
     }
   };
 
-  const spectate = async () => {
+  const leaveRoom = async () => {
     try {
-      await RoomsAPI.spectate(id);
-      setSpectator(true);
-      push('Spectating', 'info');
-    } catch {
-      push('Could not spectate', 'error');
-    }
-  };
-
-  const leave = async () => {
-    try {
-      await RoomsAPI.leave(id);
+      await RoomsAPI.leave(roomId);
       router.push('/dashboard');
     } catch {
-      push('Could not leave room', 'error');
+      push('Otaqdan çıxmaq olmadı', 'error');
     }
   };
 
-  const buyTicket = async () => {
-    if (!game) return;
+  const markNumber = async (ticketId: string, number: number) => {
+    if (!game || marking === `${ticketId}-${number}` || !game.drawnNumbers.includes(number)) return;
+    setMarking(`${ticketId}-${number}`);
     try {
-      const tk = (await GamesAPI.buyTicket(game.id)) as GameTicket;
-      setTicket(tk);
-      push('Ticket purchased', 'success');
-    } catch {
-      push('Could not buy ticket', 'error');
+      connectSocket(user?.id).emit(SOCKET_EVENTS.MARK_NUMBER, { gameId: game.id, ticketId, number });
+    } finally {
+      setTimeout(() => setMarking(null), 300);
     }
-  };
-
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-    const socket = connectSocket();
-    socket.emit(SOCKET_EVENTS.MESSAGE, { roomId: id, message: chatInput.trim() });
-    setChatInput('');
   };
 
   if (loading || !room) {
     return <div className="grid h-64 place-items-center text-gold-300">{t('common.loading')}</div>;
   }
 
-  const drawn = new Set(game?.drawnNumbers ?? []);
-
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
-      <div className="space-y-5">
-        <GlassCard className="flex flex-wrap items-center justify-between gap-4 p-5">
+    <div className="space-y-5">
+      <GlassCard className="wood-panel overflow-hidden p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className="wood-button h-11 w-11 text-xl"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              onClick={() => setSoundOn((s) => !s)}
+              className="wood-button h-11 w-11 text-lg"
+            >
+              {soundOn ? '🔊' : '🔇'}
+            </button>
+          </div>
+
+          <div className="relative flex flex-1 items-center justify-center px-2">
+            <div className="lotto-bowl">
+              {game?.currentNumber ? <span className="lotto-ball animate-pop-in">{game.currentNumber}</span> : null}
+            </div>
+          </div>
+
+          <div className="min-w-[140px] rounded-[28px] border border-black/10 bg-black/10 px-3 py-2">
+            <div className="mb-1 text-right text-[10px] uppercase tracking-[0.2em] text-gold-900/70">Son daşlar</div>
+            <div className="flex justify-end gap-2">
+              {lastDraws.length === 0 ? <span className="text-sm text-gold-900/50">—</span> : null}
+              {lastDraws.map((value) => (
+                <span key={value} className="history-chip">{value}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-gold-950/80">
           <div>
-            <h1 className="font-display text-xl font-bold text-gold-100">{room.name}</h1>
-            <div className="mt-1 flex items-center gap-3 text-xs text-gold-100/50">
-              <span className="flex items-center gap-1"><IconUsers className="h-3.5 w-3.5" />{room.players?.length ?? 0}/{room.maxPlayers}</span>
-              <span className="flex items-center gap-1"><IconCoin className="h-3.5 w-3.5" />{formatMoney(room.entryFee, currency)}</span>
-              <span className={cn('rounded-full px-2 py-0.5 uppercase tracking-wide', room.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gold-500/15 text-gold-300')}>
-                {room.status === 'active' ? t('game.live') : room.status === 'finished' ? t('game.finished') : t('game.waiting')}
-              </span>
+            <h1 className="font-display text-xl font-bold text-gold-950">{room.name}</h1>
+            <div className="mt-1 flex items-center gap-4 text-xs text-gold-950/60">
+              <span className="flex items-center gap-1"><IconUsers className="h-3.5 w-3.5" /> {room.players.length}/{room.maxPlayers}</span>
+              <span className="flex items-center gap-1"><IconCoin className="h-3.5 w-3.5" /> {formatMoney(room.entryFee, currency)}</span>
+              <span>Komissiya: {Math.round((game?.commissionRate ?? 0.08) * 100)}%</span>
             </div>
           </div>
+
           <div className="flex gap-2">
-            {!isInRoom && !spectator && (
-              <>
-                <Button size="sm" onClick={join}>{t('game.joinRoom')}</Button>
-                <Button size="sm" variant="secondary" icon={<IconEye className="h-4 w-4" />} onClick={spectate}>{t('game.spectate')}</Button>
-              </>
-            )}
-            {isInRoom && <Button size="sm" variant="danger" onClick={leave}>{t('game.leaveRoom')}</Button>}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-5">
-          <h2 className="mb-4 flex items-center gap-2 font-display text-sm font-semibold uppercase tracking-wide text-gold-200/70">
-            <IconCrown className="h-4 w-4" /> {t('game.drawnNumbers')}
-          </h2>
-          <div className="grid grid-cols-9 gap-2">
-            {Array.from({ length: 90 }, (_, i) => i + 1).map((n) => (
-              <div
-                key={n}
-                className={cn(
-                  'flex aspect-square items-center justify-center rounded-lg border text-xs font-semibold transition-all',
-                  drawn.has(n) ? 'border-gold-400 bg-gradient-to-b from-gold-300 to-gold-600 text-bg shadow-gold animate-pop' : 'border-white/5 bg-white/[0.02] text-gold-100/30'
-                )}
-              >
-                {n}
-              </div>
-            ))}
-          </div>
-          {game?.currentNumber && (
-            <div className="mt-5 flex items-center justify-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-b from-gold-200 to-gold-600 font-display text-2xl font-bold text-bg shadow-gold animate-pulse-glow">
-                {game.currentNumber}
-              </span>
-            </div>
-          )}
-        </GlassCard>
-
-        {isInRoom && (
-          <GlassCard className="p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-gold-200/70">{t('game.yourCard')}</h2>
-              {!ticket && game && <Button size="sm" onClick={buyTicket}>{t('game.yourCard')}</Button>}
-            </div>
-            {ticket ? (
-              <div className="grid grid-cols-9 gap-1.5 rounded-xl bg-white/[0.02] p-3">
-                {ticket.numbers.flat().map((n, idx) => (
-                  <div
-                    key={idx}
-                    className={cn(
-                      'flex aspect-square items-center justify-center rounded-md text-[11px] font-medium',
-                      n === 0 ? 'bg-transparent' : ticket.markedNumbers?.includes(n) ? 'bg-gold-500 text-bg' : 'bg-white/5 text-gold-100/80'
-                    )}
-                  >
-                    {n !== 0 ? n : ''}
-                  </div>
-                ))}
-              </div>
+            {!isJoined ? (
+              <Button size="sm" onClick={joinRoom}>Qoşul və başlat</Button>
             ) : (
-              <p className="text-sm text-gold-100/40">No ticket yet — buy one once the game starts.</p>
+              <Button size="sm" variant="danger" onClick={leaveRoom}>Çıx</Button>
             )}
-          </GlassCard>
-        )}
-      </div>
+          </div>
+        </div>
 
-      <div className="space-y-5">
-        <GlassCard className="p-5">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-semibold uppercase tracking-wide text-gold-200/70">
-            <IconUsers className="h-4 w-4" /> {t('game.players')}
-          </h2>
-          <div className="space-y-2.5">
-            {room.players?.map((p) => (
-              <div key={p.id} className="flex items-center gap-3">
-                <Avatar name={p.firstName} email={p.email} src={p.avatar} size={32} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-gold-100/85">{p.firstName || p.email}</p>
+        <div className="mt-4 overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-3">
+            {visiblePlayers.map((player) => (
+              <div key={player.id} className="wood-player-card min-w-[92px]">
+                <Avatar name={player.firstName} email={player.email} src={player.avatar} size={46} />
+                <div className="mt-2 truncate text-center text-xs font-semibold text-gold-950">
+                  {player.firstName || player.email}
                 </div>
-                {p.gamesWon > 0 && <span className="flex items-center gap-1 text-[10px] text-gold-400"><IconCrown className="h-3 w-3" />{p.gamesWon}</span>}
+                {player.isBot ? <div className="mt-1 text-center text-[10px] uppercase tracking-wide text-gold-950/60">bot</div> : null}
               </div>
             ))}
-            {(!room.players || room.players.length === 0) && <p className="text-sm text-gold-100/40">{t('game.waiting')}</p>}
           </div>
-        </GlassCard>
+        </div>
+      </GlassCard>
 
-        <GlassCard className="flex h-[420px] flex-col p-5">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-semibold uppercase tracking-wide text-gold-200/70">
-            <IconChat className="h-4 w-4" /> {t('game.chat')}
-          </h2>
-          <div className="flex-1 space-y-2.5 overflow-y-auto pr-1">
-            {messages.map((m, i) => (
-              <div key={i} className="text-sm">
-                <span className="text-gold-300/80">{m.username}: </span>
-                <span className="text-gold-100/70">{m.message}</span>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="space-y-4">
+          {isJoined && tickets.length > 0 ? tickets.map((ticket, idx) => (
+            <GlassCard key={ticket.id} className="wood-panel p-4 sm:p-5">
+              <div className="mb-3 flex items-center justify-between text-sm text-gold-950/70">
+                <span className="font-display text-lg font-semibold text-gold-950">Kart {idx + 1}</span>
+                <span>{ticket.markedNumbers.length}/15 qeyd olunub</span>
               </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-          <form onSubmit={sendMessage} className="mt-3 flex gap-2">
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder={t('game.sendMessage')}
-              className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-gold-50 outline-none placeholder:text-gold-100/30 focus:border-gold-500/60"
-            />
-            <Button size="sm" type="submit">{t('common.submit')}</Button>
-          </form>
-        </GlassCard>
+              <div className="grid grid-cols-9 gap-[2px] rounded-[18px] bg-white/40 p-2 sm:gap-1 sm:p-3">
+                {ticket.card.flatMap((row, rowIndex) =>
+                  row.cells.map((cell, cellIndex) => {
+                    const isEmpty = cell === 0;
+                    const isMarked = ticket.markedNumbers.includes(cell);
+                    const isDrawable = !isEmpty && !!game?.drawnNumbers.includes(cell);
+                    return (
+                      <button
+                        key={`${rowIndex}-${cellIndex}-${cell}`}
+                        type="button"
+                        disabled={isEmpty || !isDrawable}
+                        onClick={() => !isEmpty && markNumber(ticket.id, cell)}
+                        className={[
+                          'ticket-cell',
+                          isEmpty ? 'ticket-cell-empty' : '',
+                          isMarked ? 'ticket-cell-marked' : '',
+                          !isMarked && isDrawable ? 'ticket-cell-active' : '',
+                        ].join(' ')}
+                      >
+                        {cell === 0 ? '' : cell}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </GlassCard>
+          )) : (
+            <GlassCard className="wood-panel p-8 text-center text-gold-950/65">
+              {isJoined ? 'Kartlar hazırlanır...' : 'Oyuna daxil olduqda 3 loto kartı avtomatik veriləcək.'}
+            </GlassCard>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <GlassCard className="wood-panel p-5">
+            <h2 className="font-display text-lg font-semibold text-gold-950">Oyun qaydası</h2>
+            <div className="mt-3 space-y-2 text-sm text-gold-950/75">
+              <p>Daşlar avtomatik açılır.</p>
+              <p>Öz kartınızdakı uyğun rəqəmlərə toxunaraq qeyd edin.</p>
+              <p>Bütün daşları ilk tamamlayan qalib olur.</p>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="wood-panel p-5">
+            <h2 className="font-display text-lg font-semibold text-gold-950">Mərc məlumatı</h2>
+            <div className="mt-3 space-y-2 text-sm text-gold-950/75">
+              <p>Giriş məbləği: {formatMoney(room.entryFee, currency)}</p>
+              <p>Ümumi fond: {formatMoney(game?.totalPool ?? room.entryFee * room.players.length, currency)}</p>
+              <p>Net uduş: {formatMoney(game?.payoutAmount ?? 0, currency)}</p>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="wood-panel p-5">
+            <h2 className="font-display text-lg font-semibold text-gold-950">Status</h2>
+            <div className="mt-3 text-sm text-gold-950/75">
+              {game?.status === 'completed' ? (
+                <div className="space-y-2">
+                  <p>Oyun tamamlandı.</p>
+                  <p>Qalib tipi: {game.winnerType === 'real' ? 'Real user' : game.winnerType === 'bot' ? 'Bot' : '—'}</p>
+                  <p>Komissiya: {formatMoney(game.commissionAmount ?? 0, currency)}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p>{game ? 'Oyun davam edir.' : 'Real istifadəçi qoşulduqda oyun başlayacaq.'}</p>
+                  <p>Son daş: {game?.currentNumber ?? '—'}</p>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
       </div>
     </div>
   );
