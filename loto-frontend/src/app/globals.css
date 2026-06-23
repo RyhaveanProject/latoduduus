@@ -8,32 +8,151 @@
 }
 
 html, body {
-  background: #06070d;
+  background: #6b3e1f;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03), rgba(0,0,0,0.08)),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.01) 40%, rgba(0,0,0,0.05) 100%);
   color: #f4ede0;
 }
 
-* { scrollbar-width: thin; scrollbar-color: #d9a536 #0b0e18; }
+body {
+  min-height: 100vh;
+}
+
+* { scrollbar-width: thin; scrollbar-color: #d9a536 #5e3519; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-track { background: #0b0e18; }
+*::-webkit-scrollbar-track { background: #5e3519; }
 *::-webkit-scrollbar-thumb { background: #8f6620; border-radius: 8px; }
 
 .glass {
-  background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(217,165,54,0.18);
+  background: linear-gradient(180deg, rgba(231, 192, 140, 0.92), rgba(177, 111, 52, 0.9));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(97, 48, 13, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 12px 30px rgba(53, 21, 7, 0.18);
+}
+
+.wood-panel {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.1), rgba(0,0,0,0.06)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(120, 67, 33, 0.95) 0px,
+      rgba(156, 92, 44, 0.92) 18px,
+      rgba(171, 103, 52, 0.9) 36px,
+      rgba(133, 74, 34, 0.94) 54px
+    );
 }
 
 .text-gradient-gold {
-  background: linear-gradient(90deg, #f8eac0, #d9a536 45%, #8f6620);
+  background: linear-gradient(90deg, #f8eac0, #f2cd73 45%, #8f6620);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-.shimmer-bg {
-  background: linear-gradient(90deg, transparent, rgba(217,165,54,0.25), transparent);
-  background-size: 200% 100%;
+.wood-button {
+  border-radius: 16px;
+  border: 1px solid rgba(83, 43, 12, 0.2);
+  background: linear-gradient(180deg, #f4d2ad 0%, #d19a67 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 6px 14px rgba(72, 35, 12, 0.16);
+  color: #532d13;
+}
+
+.wood-player-card {
+  border-radius: 18px;
+  padding: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(0,0,0,0.08));
+  border: 1px solid rgba(90, 49, 18, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+.lotto-bowl {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  height: 132px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 30%, #f5d7b9 0%, #cb8c51 65%, #966033 100%);
+  box-shadow: inset 0 1px 10px rgba(255,255,255,0.28), 0 10px 20px rgba(83, 43, 12, 0.2);
+}
+
+.lotto-bowl::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 999px;
+  border: 2px solid rgba(83, 43, 12, 0.18);
+}
+
+.lotto-ball {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 82px;
+  height: 82px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff2da, #f3bf76);
+  color: #4e2911;
+  font-size: 2.25rem;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.14);
+}
+
+.history-chip {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f7e4cb, #d8a06a);
+  color: #5a3015;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(81, 41, 15, 0.16);
+}
+
+.ticket-cell {
+  min-height: 52px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.95);
+  color: #111;
+  font-size: 1.9rem;
+  line-height: 1;
+  font-weight: 500;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.ticket-cell-empty {
+  background: rgba(255,255,255,0.68);
+  cursor: default;
+}
+
+.ticket-cell-active {
+  background: #fff7db;
+  box-shadow: inset 0 0 0 2px rgba(214, 143, 48, 0.45);
+  cursor: pointer;
+}
+
+.ticket-cell-active:hover {
+  transform: translateY(-1px);
+}
+
+.ticket-cell-marked {
+  background: linear-gradient(180deg, #ffe39d, #f2b64f);
+  color: #4b2a12;
+  box-shadow: inset 0 0 0 2px rgba(146, 87, 26, 0.28);
+}
+
+.animate-pop-in {
+  animation: popIn .3s ease;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.82); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 [dir="rtl"] .flip-rtl { transform: scaleX(-1); }
