@@ -12,7 +12,6 @@ import { Room, RoomDocument } from '../../schemas/room.schema';
 import { GameEngineService } from '../../services/game-engine.service';
 import { CreateGameDto, GameStateDto } from '../../dtos/game.dto';
 import { UsersService } from '../users/users.service';
-import { RoomsService } from '../rooms/rooms.service';
 
 @Injectable()
 export class GamesService {
@@ -22,7 +21,6 @@ export class GamesService {
     @InjectModel(Room.name) private roomModel: Model<RoomDocument>,
     private gameEngineService: GameEngineService,
     private usersService: UsersService,
-    private roomsService: RoomsService,
   ) {}
 
   async createGame(createGameDto: CreateGameDto): Promise<GameStateDto> {
@@ -75,6 +73,8 @@ export class GamesService {
     room.status = 'active';
     room.totalPrizePool = game.totalPool;
     room.currentPlayers = participantIds.length;
+    room.countdownStartedAt = undefined;
+    room.countdownEndsAt = undefined;
     await room.save();
 
     return this.getGameState(game._id as string);
@@ -239,6 +239,7 @@ export class GamesService {
       payoutAmount: game.payoutAmount || 0,
       winnerId: game.winnerId,
       winnerType: game.winnerType,
+      winnerName: game.winnerName,
       completedAt: game.completedAt,
     };
   }
@@ -253,6 +254,18 @@ export class GamesService {
 
   async getUserTicketsForGame(gameId: string, userId: string) {
     return this.ticketModel.find({ gameId, userId }).sort({ boardIndex: 1 });
+  }
+
+  private async resolveWinnerName(
+    room: RoomDocument,
+    winner: { winnerId: string; winnerType: 'real' | 'bot' },
+  ): Promise<string> {
+    if (winner.winnerType === 'bot') {
+      return room.botProfiles.find((bot) => bot.id === winner.winnerId)?.name || 'Qalib';
+    }
+
+    const user = await this.usersService.getUserById(winner.winnerId);
+    return user.firstName || user.email || 'Qalib';
   }
 
   async completeGame(
@@ -272,12 +285,19 @@ export class GamesService {
       throw new BadRequestException('Winner is required to complete the game');
     }
 
+    const room = await this.roomModel.findById(game.roomId);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    const winnerName = await this.resolveWinnerName(room, winner);
     const commissionAmount = Math.floor(game.totalPool * game.commissionRate * 100) / 100;
     const payoutAmount = Math.max(0, Math.floor((game.totalPool - commissionAmount) * 100) / 100);
 
     game.status = 'completed';
     game.winnerId = winner.winnerId;
     game.winnerType = winner.winnerType;
+    game.winnerName = winnerName;
     game.winnerTicketId = winner.winnerTicketId;
     game.commissionAmount = commissionAmount;
     game.payoutAmount = payoutAmount;
@@ -291,13 +311,14 @@ export class GamesService {
       await ticket.save();
     }
 
-    const room = await this.roomModel.findById(game.roomId);
-    if (room) {
-      room.currentGameId = undefined;
-      room.status = 'waiting';
-      room.totalPrizePool = 0;
-      await room.save();
-    }
+    room.currentGameId = undefined;
+    room.status = room.players.length > 0 ? 'countdown' : 'waiting';
+    room.totalPrizePool = 0;
+    room.countdownStartedAt = undefined;
+    room.countdownEndsAt = undefined;
+    room.lastWinnerName = winnerName;
+    room.lastGameCompletedAt = new Date();
+    await room.save();
 
     if (winner.winnerType === 'real') {
       await this.usersService.addBalance(
@@ -307,16 +328,13 @@ export class GamesService {
       );
     }
 
-    if (room) {
-      for (const realUserId of room.players) {
-        await this.usersService.updateGameStats(
-          realUserId,
-          realUserId === winner.winnerId && winner.winnerType === 'real',
-          realUserId === winner.winnerId && winner.winnerType === 'real' ? payoutAmount : 0,
-          room.entryFee,
-        );
-      }
-      await this.roomsService.setRoomGame(room._id as string, null);
+    for (const realUserId of room.players) {
+      await this.usersService.updateGameStats(
+        realUserId,
+        realUserId === winner.winnerId && winner.winnerType === 'real',
+        realUserId === winner.winnerId && winner.winnerType === 'real' ? payoutAmount : 0,
+        room.entryFee,
+      );
     }
 
     return this.getGameState(gameId);
