@@ -1,0 +1,2 @@
+export declare const GetUser: (...dataOrPipes: (string | import("@nestjs/common").PipeTransform<any, any> | import("@nestjs/common").Type<import("@nestjs/common").PipeTransform<any, any>> | undefined)[]) => ParameterDecorator;
+//# sourceMappingURL=get-user.decorator.d.ts.map
