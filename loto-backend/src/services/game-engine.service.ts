@@ -24,31 +24,27 @@ export class GameEngineService {
     }
 
     const columnFillCounts = this.generateColumnFillCounts();
-    const rowFilledColumns = this.assignColumnsToRows(columnFillCounts);
+    const mask = this.buildMask(columnFillCounts);
 
-    const grid: (number | null)[][] = [
-      new Array(9).fill(null),
-      new Array(9).fill(null),
-      new Array(9).fill(null),
+    const grid: number[][] = [
+      new Array(9).fill(0),
+      new Array(9).fill(0),
+      new Array(9).fill(0),
     ];
 
     for (let col = 0; col < 9; col++) {
-      const need = columnFillCounts[col];
-      if (need === 0) continue;
+      const selectedRows = [0, 1, 2].filter((row) => mask[row][col] === 1);
+      const chosen = this.pickRandomUnique(columnRanges[col], selectedRows.length).sort((a, b) => a - b);
 
-      const pool = [...columnRanges[col]];
-      const chosen = this.pickRandomUnique(pool, need).sort((a, b) => a - b);
-
-      const rowsForColumn = [0, 1, 2].filter((row) => rowFilledColumns[row].includes(col));
-      rowsForColumn.forEach((row, idx) => {
-        grid[row][col] = chosen[idx];
+      selectedRows.forEach((row, index) => {
+        grid[row][col] = chosen[index];
       });
     }
 
     return grid.map((row, index) => ({
       row: index,
-      cells: row.map((n) => n ?? 0),
-      numbers: row.filter((n): n is number => n !== null),
+      cells: row,
+      numbers: row.filter((n) => n !== 0),
     }));
   }
 
@@ -65,29 +61,74 @@ export class GameEngineService {
     return counts;
   }
 
-  private assignColumnsToRows(columnFillCounts: number[]): number[][] {
-    const remainingPerColumn = [...columnFillCounts];
-    const rows: number[][] = [[], [], []];
+  private buildMask(columnFillCounts: number[]): number[][] {
+    const matrix = [
+      new Array(9).fill(0),
+      new Array(9).fill(0),
+      new Array(9).fill(0),
+    ];
 
-    for (let row = 0; row < 3; row++) {
-      const availableColumns = remainingPerColumn
-        .map((count, col) => ({ col, count }))
-        .filter((entry) => entry.count > 0)
-        .map((entry) => entry.col);
+    const success = this.assignColumnMask(0, columnFillCounts, [0, 0, 0], matrix);
+    if (!success) {
+      return this.buildMask(this.generateColumnFillCounts());
+    }
 
-      const chosen = this.pickRandomUnique(availableColumns, 5);
-      chosen.forEach((col) => {
-        rows[row].push(col);
-        remainingPerColumn[col] -= 1;
+    return matrix;
+  }
+
+  private assignColumnMask(
+    columnIndex: number,
+    columnFillCounts: number[],
+    rowFillCounts: number[],
+    matrix: number[][],
+  ): boolean {
+    if (columnIndex === columnFillCounts.length) {
+      return rowFillCounts.every((count) => count === 5);
+    }
+
+    const need = columnFillCounts[columnIndex];
+    const combinations = this.shuffleArray(this.rowCombinations(need));
+    const remainingColumns = columnFillCounts.length - columnIndex - 1;
+
+    for (const rows of combinations) {
+      const nextCounts = [...rowFillCounts];
+      let valid = true;
+
+      for (const row of rows) {
+        nextCounts[row] += 1;
+        if (nextCounts[row] > 5) {
+          valid = false;
+          break;
+        }
+      }
+
+      if (!valid) continue;
+
+      if (nextCounts.some((count) => 5 - count > remainingColumns)) {
+        continue;
+      }
+
+      rows.forEach((row) => {
+        matrix[row][columnIndex] = 1;
+      });
+
+      if (this.assignColumnMask(columnIndex + 1, columnFillCounts, nextCounts, matrix)) {
+        return true;
+      }
+
+      rows.forEach((row) => {
+        matrix[row][columnIndex] = 0;
       });
     }
 
-    const totalAssigned = rows.reduce((sum, item) => sum + item.length, 0);
-    if (totalAssigned !== 15 || remainingPerColumn.some((count) => count !== 0)) {
-      return this.assignColumnsToRows(this.generateColumnFillCounts());
-    }
+    return false;
+  }
 
-    return rows.map((row) => row.sort((a, b) => a - b));
+  private rowCombinations(count: number): number[][] {
+    const rows = [0, 1, 2];
+    if (count === 1) return rows.map((row) => [row]);
+    if (count === 2) return [[0, 1], [0, 2], [1, 2]];
+    return [[0, 1, 2]];
   }
 
   private pickRandomUnique<T>(items: T[], count: number): T[] {
@@ -106,7 +147,7 @@ export class GameEngineService {
     return this.shuffleArray(numbers);
   }
 
-  private shuffleArray(array: number[]): number[] {
+  private shuffleArray<T>(array: T[]): T[] {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
