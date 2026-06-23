@@ -18,6 +18,7 @@
     "emitDecoratorMetadata": true,
     "useDefineForClassFields": false,
     "strictPropertyInitialization": false,
+    "types": ["node", "multer"],
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"],
