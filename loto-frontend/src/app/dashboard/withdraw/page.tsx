@@ -15,8 +15,23 @@ interface WithdrawTx {
   id: string;
   amount: number;
   status: 'pending' | 'accepted' | 'rejected';
-  method: 'bank' | 'crypto';
+  method?: string;
+  paymentMethod?: string;
   createdAt: string;
+}
+
+// API paginated cavabından array çıxarır: { withdraws: [...] } | WithdrawTx[]
+function extractWithdraws(res: unknown): WithdrawTx[] {
+  if (!res) return [];
+  if (Array.isArray(res)) return res as WithdrawTx[];
+  const r = res as Record<string, unknown>;
+  if (Array.isArray(r.withdraws)) return r.withdraws as WithdrawTx[];
+  if (Array.isArray(r.data)) return r.data as WithdrawTx[];
+  return [];
+}
+
+function getMethod(tx: WithdrawTx): string {
+  return tx.method ?? tx.paymentMethod ?? 'bank';
 }
 
 export default function WithdrawPage() {
@@ -35,11 +50,13 @@ export default function WithdrawPage() {
   const [submitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<WithdrawTx[]>([]);
 
-  useEffect(() => {
+  const loadHistory = () => {
     WithdrawAPI.myWithdraws()
-      .then((res) => setHistory((res as WithdrawTx[]) ?? []))
-      .catch(() => {});
-  }, []);
+      .then((res) => setHistory(extractWithdraws(res)))
+      .catch(() => setHistory([]));
+  };
+
+  useEffect(() => { loadHistory(); }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +69,7 @@ export default function WithdrawPage() {
     try {
       const payload: Record<string, unknown> = {
         method: mode,
+        paymentMethod: mode,
         amount: amt,
         currency: mode === 'bank' ? meta.currency : 'USD',
       };
@@ -64,17 +82,16 @@ export default function WithdrawPage() {
         payload.network = 'TRC20';
       }
       await WithdrawAPI.create(payload);
-      push('Withdrawal requested', 'success');
+      push(t('withdraw.submitWithdraw') + ' ✓', 'success');
       if (user) setUser({ ...user, balance: user.balance - amt });
       setAmount('');
       setCardNumber('');
       setCvv('');
       setWallet('');
-      const res = await WithdrawAPI.myWithdraws();
-      setHistory((res as WithdrawTx[]) ?? []);
+      loadHistory();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      push(msg || 'Could not request withdrawal', 'error');
+      push(typeof msg === 'string' ? msg : 'Could not request withdrawal', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -87,10 +104,24 @@ export default function WithdrawPage() {
 
         {!isCryptoOnly && (
           <div className="mb-5 flex gap-2">
-            <button type="button" onClick={() => setMode('bank')} className={cn('flex-1 rounded-xl border px-4 py-2.5 text-sm font-medium', mode === 'bank' ? 'border-gold-500/60 bg-gold-500/10 text-gold-200' : 'border-white/10 text-gold-100/50')}>
+            <button
+              type="button"
+              onClick={() => setMode('bank')}
+              className={cn(
+                'flex-1 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors',
+                mode === 'bank' ? 'border-gold-500/60 bg-gold-500/10 text-gold-200' : 'border-white/10 text-gold-100/50 hover:bg-white/5'
+              )}
+            >
               {t('withdraw.card')}
             </button>
-            <button type="button" onClick={() => setMode('crypto')} className={cn('flex-1 rounded-xl border px-4 py-2.5 text-sm font-medium', mode === 'crypto' ? 'border-gold-500/60 bg-gold-500/10 text-gold-200' : 'border-white/10 text-gold-100/50')}>
+            <button
+              type="button"
+              onClick={() => setMode('crypto')}
+              className={cn(
+                'flex-1 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors',
+                mode === 'crypto' ? 'border-gold-500/60 bg-gold-500/10 text-gold-200' : 'border-white/10 text-gold-100/50 hover:bg-white/5'
+              )}
+            >
               {t('withdraw.crypto')}
             </button>
           </div>
@@ -106,9 +137,20 @@ export default function WithdrawPage() {
           ) : (
             <Input label={t('withdraw.wallet')} required value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder="T..." />
           )}
-          <Input label={`${t('withdraw.amount')} (${mode === 'bank' ? meta.currency : 'USD'})`} type="number" required min={1} value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <p className="text-xs text-gold-100/40">{t('common.balance')}: {formatMoney(user?.balance ?? 0, meta.currency)}</p>
-          <Button type="submit" className="w-full" size="lg" loading={submitting}>{t('withdraw.submitWithdraw')}</Button>
+          <Input
+            label={`${t('withdraw.amount')} (${mode === 'bank' ? meta.currency : 'USD'})`}
+            type="number"
+            required
+            min={1}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <p className="text-xs text-gold-100/40">
+            {t('common.balance')}: {formatMoney(user?.balance ?? 0, meta.currency)}
+          </p>
+          <Button type="submit" className="w-full" size="lg" loading={submitting}>
+            {t('withdraw.submitWithdraw')}
+          </Button>
         </form>
       </GlassCard>
 
@@ -118,7 +160,9 @@ export default function WithdrawPage() {
           {history.length === 0 && <p className="text-sm text-gold-100/40">—</p>}
           {history.map((tx) => (
             <div key={tx.id} className="flex items-center justify-between rounded-xl bg-white/[0.02] px-3.5 py-2.5 text-sm">
-              <span className="text-gold-100/70">{formatMoney(tx.amount, tx.method === 'bank' ? meta.currency : 'USD')}</span>
+              <span className="text-gold-100/70">
+                {formatMoney(tx.amount, getMethod(tx) === 'bank' ? meta.currency : 'USD')}
+              </span>
               <span className="text-gold-100/40">{new Date(tx.createdAt).toLocaleDateString()}</span>
               <StatusPill status={tx.status} t={t} />
             </div>
@@ -133,7 +177,12 @@ function StatusPill({ status, t }: { status: string; t: (k: string) => string })
   const map: Record<string, string> = {
     pending: 'bg-gold-500/15 text-gold-300',
     accepted: 'bg-emerald-500/15 text-emerald-400',
+    approved: 'bg-emerald-500/15 text-emerald-400',
     rejected: 'bg-ruby-500/15 text-ruby-400',
   };
-  return <span className={`rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-wide ${map[status] ?? map.pending}`}>{t(`common.${status}`)}</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-wide ${map[status] ?? map.pending}`}>
+      {t(`common.${status}`) || status}
+    </span>
+  );
 }
