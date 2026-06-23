@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
 import { IconSpinner } from './icons';
@@ -7,6 +7,7 @@ import { IconSpinner } from './icons';
 export function AuthGuard({ children, requireAdmin }: { children: React.ReactNode; requireAdmin?: boolean }) {
   const { user, hydrated, hydrate } = useAuthStore();
   const router = useRouter();
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     if (!hydrated) hydrate();
@@ -16,24 +17,30 @@ export function AuthGuard({ children, requireAdmin }: { children: React.ReactNod
     if (!hydrated) return;
 
     if (!user) {
+      setRedirecting(true);
       router.replace('/login');
       return;
     }
 
-    // Admin istifadəçi dashboard-a girmək istəyirsə → admin panelə yönləndir
-    if (!requireAdmin && (user.role === 'admin' || user.role === 'superadmin')) {
+    const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+
+    if (!requireAdmin && isAdmin) {
+      // Admin user in dashboard → send to admin panel
+      setRedirecting(true);
       router.replace('/admin');
       return;
     }
 
-    // Adi istifadəçi admin panelə girmək istəyirsə → dashboard-a yönləndir
-    if (requireAdmin && user.role === 'user') {
+    if (requireAdmin && !isAdmin) {
+      // Normal user in admin panel → send to dashboard
+      setRedirecting(true);
       router.replace('/dashboard');
       return;
     }
   }, [hydrated, user, requireAdmin, router]);
 
-  if (!hydrated || !user) {
+  // Show spinner while loading or redirecting
+  if (!hydrated || !user || redirecting) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg text-gold-300">
         <IconSpinner className="h-7 w-7" />
@@ -41,23 +48,11 @@ export function AuthGuard({ children, requireAdmin }: { children: React.ReactNod
     );
   }
 
-  // Admin dashboard-da olmamalı
-  if (!requireAdmin && (user.role === 'admin' || user.role === 'superadmin')) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-gold-300">
-        <IconSpinner className="h-7 w-7" />
-      </div>
-    );
-  }
+  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
 
-  // Adi user admin paneldə olmamalı
-  if (requireAdmin && user.role === 'user') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-gold-300">
-        <IconSpinner className="h-7 w-7" />
-      </div>
-    );
-  }
+  // Don't render dashboard content for admins, or admin content for users
+  if (!requireAdmin && isAdmin) return null;
+  if (requireAdmin && !isAdmin) return null;
 
   return <>{children}</>;
 }
