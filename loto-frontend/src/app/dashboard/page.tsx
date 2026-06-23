@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { GlassCard } from '@/components/GlassCard';
-import { Button } from '@/components/Button';
 import { useI18n } from '@/lib/i18n';
 import { useAuthStore } from '@/lib/auth-store';
 import { getLocaleMeta } from '@/lib/locale-config';
@@ -60,7 +59,7 @@ export default function HomePage() {
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gold-100/70">
-            6 nəfərlik hazır otaqlar • botlar 15 dəqiqədən bir yenilənir
+            6 nəfərlik canlı otaqlar • açıq otağa daxil olan kimi 10 saniyəlik start geri sayımı başlayır
           </div>
         </div>
       </GlassCard>
@@ -88,7 +87,7 @@ export default function HomePage() {
 
       <div className="flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold text-gold-100">Hazır otaqlar</h2>
-        <span className="text-xs text-gold-300/70">Giriş edən kimi oyun start verir</span>
+        <span className="text-xs text-gold-300/70">Hamı eyni daşı eyni anda görür</span>
       </div>
 
       {loading ? (
@@ -99,38 +98,34 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rooms.map((r) => {
-            const botCount = r.players?.filter((p) => p.isBot).length ?? 0;
-            const realCount = (r.players?.length ?? 0) - botCount;
-            return (
-              <Link key={r.id} href={`/dashboard/game?roomId=${r.id}`}>
-                <GlassCard className="group wood-panel p-5 transition-transform hover:-translate-y-0.5 hover:shadow-gold">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display text-base font-semibold text-gold-100">{r.name}</h3>
-                    <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
-                      {r.currentGameId ? 'LIVE' : 'HAZIR'}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-gold-100/70">
-                    <span className="flex items-center gap-1.5">
-                      <IconUsers className="h-4 w-4" /> {r.players?.length ?? 0}/{r.maxPlayers}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <IconCoin className="h-4 w-4" /> {formatMoney(r.entryFee, currency)}
-                    </span>
-                    <span>Real user: {Math.max(realCount, 0)}</span>
-                    <span>Bot: {botCount}</span>
-                  </div>
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-gold-100/70">
-                    Qazanan oyunçu ümumi məbləğin 92%-ni alır • 8% komissiya tutulur
-                  </div>
-                  <div className="mt-4 flex items-center justify-end text-xs text-gold-300 opacity-0 transition-opacity group-hover:opacity-100">
-                    Otağa gir <IconArrowRight className="ml-1 h-3.5 w-3.5" />
-                  </div>
-                </GlassCard>
-              </Link>
-            );
-          })}
+          {rooms.map((r) => (
+            <Link key={r.id} href={`/dashboard/game?roomId=${r.id}`}>
+              <GlassCard className="group wood-panel p-5 transition-transform hover:-translate-y-0.5 hover:shadow-gold">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display text-base font-semibold text-gold-100">{r.name}</h3>
+                  <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
+                    {r.currentGameId ? 'LIVE' : r.status === 'countdown' ? 'START' : 'HAZIR'}
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-gold-100/70">
+                  <span className="flex items-center gap-1.5">
+                    <IconUsers className="h-4 w-4" /> {r.players?.length ?? 0}/{r.maxPlayers}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <IconCoin className="h-4 w-4" /> {formatMoney(r.entryFee, currency)}
+                  </span>
+                  <span>Fond: {formatMoney(r.totalPrizePool ?? 0, currency)}</span>
+                  <span>{r.countdownEndsAt ? '10 san. start' : '3 kart verilir'}</span>
+                </div>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/10 px-3 py-2 text-xs text-gold-100/70">
+                  3 kart • 90 daş • manual seçim • qalib bütün kartı ilk tamamlayan olur
+                </div>
+                <div className="mt-4 flex items-center justify-end text-xs text-gold-300 opacity-0 transition-opacity group-hover:opacity-100">
+                  Otağa gir <IconArrowRight className="ml-1 h-3.5 w-3.5" />
+                </div>
+              </GlassCard>
+            </Link>
+          ))}
         </div>
       )}
 
@@ -146,13 +141,11 @@ export default function HomePage() {
           </div>
         ) : (
           history.map((g) => (
-            <div key={g.id} className="flex items-center justify-between px-5 py-3.5 text-sm">
+            <div key={g.id} className="flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
               <span className="text-gold-100/70">#{g.id?.slice(-6) ?? '—'}</span>
               <span className="text-gold-100/50">{g.totalPool ? formatMoney(g.totalPool, currency) : '—'}</span>
+              <span className="truncate text-gold-100/60">{g.winnerName || 'Qalib elan edildi'}</span>
               <span className="text-gold-100/40">{g.completedAt ? new Date(g.completedAt).toLocaleDateString() : '—'}</span>
-              <span className={g.winnerType === 'real' ? 'text-emerald-300' : 'text-gold-300'}>
-                {g.winnerType === 'real' ? 'real qalib' : g.winnerType === 'bot' ? 'bot qalib' : g.status}
-              </span>
             </div>
           ))
         )}
