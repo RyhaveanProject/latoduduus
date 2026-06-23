@@ -5,7 +5,16 @@ import { usePathname, useRouter } from 'next/navigation';
 import { AuthGuard } from '@/components/AuthGuard';
 import { Logo } from '@/components/Logo';
 import { useAuthStore } from '@/lib/auth-store';
-import { IconShield, IconUsers, IconDeposit, IconWithdraw, IconHistory, IconLogout, IconHome } from '@/components/icons';
+import {
+  IconShield,
+  IconUsers,
+  IconDeposit,
+  IconWithdraw,
+  IconHistory,
+  IconLogout,
+  IconHome,
+  IconPlus,
+} from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -13,6 +22,7 @@ const NAV = [
   { href: '/admin/users', label: 'Users', icon: IconUsers },
   { href: '/admin/deposits', label: 'Deposits', icon: IconDeposit },
   { href: '/admin/withdraws', label: 'Withdraws', icon: IconWithdraw },
+  { href: '/admin/admins', label: 'Admins', icon: IconPlus },
   { href: '/admin/logs', label: 'Telegram logs', icon: IconHistory },
 ];
 
@@ -42,7 +52,14 @@ function AdminShell({ children }: { children: React.ReactNode }) {
               const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
               const Icon = item.icon;
               return (
-                <Link key={item.href} href={item.href} className={cn('flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-colors', active ? 'bg-ruby-500/15 text-ruby-300' : 'text-gold-100/60 hover:bg-white/5')}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-colors',
+                    active ? 'bg-ruby-500/15 text-ruby-300' : 'text-gold-100/60 hover:bg-white/5',
+                  )}
+                >
                   <Icon className="h-4.5 w-4.5" />
                   {item.label}
                 </Link>
@@ -53,7 +70,13 @@ function AdminShell({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
           <div className="absolute bottom-4 w-64 px-4">
-            <button onClick={() => { logout(); router.push('/login'); }} className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm text-gold-100/50 hover:bg-white/5 hover:text-ruby-400">
+            <button
+              onClick={() => {
+                logout();
+                router.push('/login');
+              }}
+              className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm text-gold-100/50 hover:bg-white/5 hover:text-ruby-400"
+            >
               <IconLogout className="h-4.5 w-4.5" /> Log out
             </button>
           </div>
