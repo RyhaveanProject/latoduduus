@@ -28,15 +28,12 @@ export default function LoginPage() {
     try {
       const user = await login(email, password);
       push('Welcome back', 'success');
-      // Admin rolunda olanlar admin panelə, istifadəçilər dashboard-a
-      if (user.role === 'admin' || user.role === 'superadmin') {
-        router.push('/admin');
-      } else {
-        router.push('/dashboard');
-      }
+      const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+      router.push(isAdmin ? '/admin' : '/dashboard');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Invalid credentials');
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      const msg = axiosErr?.response?.data?.message;
+      setError(typeof msg === 'string' ? msg : 'Invalid credentials');
     } finally {
       setLoading(false);
     }
@@ -53,16 +50,39 @@ export default function LoginPage() {
     >
       <GlassCard className="w-full p-7">
         <form onSubmit={onSubmit} className="space-y-4">
-          <Input label={t('auth.email')} type="email" required icon={<IconMail className="h-4 w-4" />} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-          <Input label={t('auth.password')} type="password" required icon={<IconLock className="h-4 w-4" />} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+          <Input
+            label={t('auth.email')}
+            type="email"
+            required
+            icon={<IconMail className="h-4 w-4" />}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
+          <Input
+            label={t('auth.password')}
+            type="password"
+            required
+            icon={<IconLock className="h-4 w-4" />}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
           {error && <p className="text-xs text-ruby-400">{error}</p>}
           <div className="flex items-center justify-end">
-            <Link href="/forgot-password" className="text-xs text-gold-300/70 hover:text-gold-200">{t('auth.forgotPassword')}</Link>
+            <Link href="/forgot-password" className="text-xs text-gold-300/70 hover:text-gold-200">
+              {t('auth.forgotPassword')}
+            </Link>
           </div>
-          <Button type="submit" className="w-full" size="lg" loading={loading}>{t('auth.login')}</Button>
+          <Button type="submit" className="w-full" size="lg" loading={loading}>
+            {t('auth.login')}
+          </Button>
         </form>
         <p className="mt-6 text-center text-sm text-gold-100/50">
-          {t('auth.noAccount')} <Link href="/register" className="text-gold-300 hover:text-gold-200">{t('auth.signUp')}</Link>
+          {t('auth.noAccount')}{' '}
+          <Link href="/register" className="text-gold-300 hover:text-gold-200">
+            {t('auth.signUp')}
+          </Link>
         </p>
       </GlassCard>
     </AuthLayout>
