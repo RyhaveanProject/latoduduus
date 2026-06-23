@@ -1,7 +1,9 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
+import { Button } from '@/components/Button';
 import { AdminAPI } from '@/lib/api';
+import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/utils';
 
 interface DepositRow {
@@ -23,15 +25,53 @@ interface DepositHistoryResponse {
 }
 
 export default function AdminDepositsPage() {
+  const { push } = useToast();
   const [rows, setRows] = useState<DepositRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     AdminAPI.depositsHistory()
       .then((res) => setRows(Array.isArray((res as DepositHistoryResponse)?.deposits) ? (res as DepositHistoryResponse).deposits : []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const approve = async (depositId: string) => {
+    setBusyId(depositId);
+    try {
+      await AdminAPI.approveDeposit(depositId);
+      push('Deposit approved', 'success');
+      await Promise.resolve(load());
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not approve deposit', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const reject = async (depositId: string) => {
+    const reason = window.prompt('Rejection reason', 'Payment proof is invalid')?.trim();
+    if (!reason) return;
+
+    setBusyId(depositId);
+    try {
+      await AdminAPI.rejectDeposit(depositId, reason);
+      push('Deposit rejected', 'success');
+      await Promise.resolve(load());
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not reject deposit', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -46,13 +86,14 @@ export default function AdminDepositsPage() {
               <th className="px-5 py-3">Date</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3">Details</th>
+              <th className="px-5 py-3 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="px-5 py-6 text-gold-100/40">Loading...</td></tr>
+              <tr><td colSpan={7} className="px-5 py-6 text-gold-100/40">Loading...</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-6 text-gold-100/40">No deposits found</td></tr>
+              <tr><td colSpan={7} className="px-5 py-6 text-gold-100/40">No deposits found</td></tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id} className="border-b border-white/5 align-top">
@@ -69,6 +110,16 @@ export default function AdminDepositsPage() {
                   <td className="px-5 py-3 text-xs text-gold-100/55">
                     {r.approvedAt && <div>Approved: {new Date(r.approvedAt).toLocaleString()}</div>}
                     {r.rejectionReason && <div className="text-ruby-300">{r.rejectionReason}</div>}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {r.status === 'pending' ? (
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" loading={busyId === r.id} onClick={() => approve(r.id)}>Approve</Button>
+                        <Button size="sm" variant="danger" loading={busyId === r.id} onClick={() => reject(r.id)}>Reject</Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gold-100/35">Completed</span>
+                    )}
                   </td>
                 </tr>
               ))
