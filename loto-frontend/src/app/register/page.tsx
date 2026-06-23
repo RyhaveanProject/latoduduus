@@ -16,11 +16,18 @@ export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuthStore();
   const { push } = useToast();
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    confirm: '',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,12 +38,21 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      await register({ email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName, language: locale === 'ge' || locale === 'cn' ? 'en' : locale });
+      const user = await register({
+        email: form.email,
+        password: form.password,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        language: locale === 'ge' || locale === 'cn' ? 'en' : locale,
+      });
       push('Account created', 'success');
-      router.push('/dashboard');
+      // Rol yoxlanılır - admin isə admin panelə, əks halda dashboard
+      const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+      router.push(isAdmin ? '/admin' : '/dashboard');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Registration failed');
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      const msg = axiosErr?.response?.data?.message;
+      setError(typeof msg === 'string' ? msg : 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -54,17 +70,55 @@ export default function RegisterPage() {
       <GlassCard className="w-full p-7">
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Input label={t('auth.firstName')} icon={<IconUser className="h-4 w-4" />} value={form.firstName} onChange={update('firstName')} />
-            <Input label={t('auth.lastName')} value={form.lastName} onChange={update('lastName')} />
+            <Input
+              label={t('auth.firstName')}
+              icon={<IconUser className="h-4 w-4" />}
+              value={form.firstName}
+              onChange={update('firstName')}
+            />
+            <Input
+              label={t('auth.lastName')}
+              value={form.lastName}
+              onChange={update('lastName')}
+            />
           </div>
-          <Input label={t('auth.email')} type="email" required icon={<IconMail className="h-4 w-4" />} value={form.email} onChange={update('email')} placeholder="you@example.com" />
-          <Input label={t('auth.password')} type="password" required icon={<IconLock className="h-4 w-4" />} value={form.password} onChange={update('password')} minLength={8} />
-          <Input label={t('auth.confirmPassword')} type="password" required icon={<IconLock className="h-4 w-4" />} value={form.confirm} onChange={update('confirm')} minLength={8} />
+          <Input
+            label={t('auth.email')}
+            type="email"
+            required
+            icon={<IconMail className="h-4 w-4" />}
+            value={form.email}
+            onChange={update('email')}
+            placeholder="you@example.com"
+          />
+          <Input
+            label={t('auth.password')}
+            type="password"
+            required
+            icon={<IconLock className="h-4 w-4" />}
+            value={form.password}
+            onChange={update('password')}
+            minLength={8}
+          />
+          <Input
+            label={t('auth.confirmPassword')}
+            type="password"
+            required
+            icon={<IconLock className="h-4 w-4" />}
+            value={form.confirm}
+            onChange={update('confirm')}
+            minLength={8}
+          />
           {error && <p className="text-xs text-ruby-400">{error}</p>}
-          <Button type="submit" className="w-full" size="lg" loading={loading}>{t('auth.register')}</Button>
+          <Button type="submit" className="w-full" size="lg" loading={loading}>
+            {t('auth.register')}
+          </Button>
         </form>
         <p className="mt-6 text-center text-sm text-gold-100/50">
-          {t('auth.haveAccount')} <Link href="/login" className="text-gold-300 hover:text-gold-200">{t('auth.signIn')}</Link>
+          {t('auth.haveAccount')}{' '}
+          <Link href="/login" className="text-gold-300 hover:text-gold-200">
+            {t('auth.signIn')}
+          </Link>
         </p>
       </GlassCard>
     </AuthLayout>
