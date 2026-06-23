@@ -61,7 +61,7 @@ export class Room {
   @Prop({ default: 0 })
   currentPlayers!: number;
 
-  @Prop({ default: 'waiting', enum: ['waiting', 'active', 'finished'] })
+  @Prop({ default: 'waiting', enum: ['waiting', 'countdown', 'active', 'finished'] })
   status!: string;
 
   @Prop()
@@ -78,6 +78,18 @@ export class Room {
 
   @Prop()
   botRosterUpdatedAt?: Date;
+
+  @Prop()
+  countdownStartedAt?: Date;
+
+  @Prop()
+  countdownEndsAt?: Date;
+
+  @Prop()
+  lastWinnerName?: string;
+
+  @Prop()
+  lastGameCompletedAt?: Date;
 
   @Prop()
   createdAt!: Date;
