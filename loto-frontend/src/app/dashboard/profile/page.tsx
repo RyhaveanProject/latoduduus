@@ -12,6 +12,24 @@ import { UsersAPI } from '@/lib/api';
 import { useToast } from '@/components/Toast';
 import { IconLock, IconCheck } from '@/components/icons';
 
+interface TxRow {
+  id: string;
+  type?: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
+// API paginated cavabından array çıxarır: { transactions: [...] } | TxRow[]
+function extractTransactions(res: unknown): TxRow[] {
+  if (!res) return [];
+  if (Array.isArray(res)) return res as TxRow[];
+  const r = res as Record<string, unknown>;
+  if (Array.isArray(r.transactions)) return r.transactions as TxRow[];
+  if (Array.isArray(r.data)) return r.data as TxRow[];
+  return [];
+}
+
 export default function ProfilePage() {
   const { t, locale } = useI18n();
   const { user, setUser } = useAuthStore();
@@ -26,12 +44,12 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
 
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<TxRow[]>([]);
 
   useEffect(() => {
     UsersAPI.transactions()
-      .then((res) => setTransactions((res as any[]) ?? []))
-      .catch(() => {});
+      .then((res) => setTransactions(extractTransactions(res)))
+      .catch(() => setTransactions([]));
   }, []);
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -63,13 +81,19 @@ export default function ProfilePage() {
     }
   };
 
-  const deposits = transactions.filter((tx) => tx.type === 'deposit');
-  const withdraws = transactions.filter((tx) => tx.type === 'withdraw');
+  // transactions massivini filter et - type sahəsi olmaya bilər, buna görə ?. işlət
+  const deposits = transactions.filter((tx) => !tx.type || tx.type === 'deposit');
+  const withdraws = transactions.filter((tx) => tx.type === 'withdraw' || tx.type === 'withdrawal');
 
   return (
     <div className="space-y-6">
       <GlassCard className="flex flex-wrap items-center gap-5 p-6">
-        <Avatar name={`${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim()} email={user?.email} src={user?.avatar} size={64} />
+        <Avatar
+          name={`${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim()}
+          email={user?.email}
+          src={user?.avatar}
+          size={64}
+        />
         <div>
           <h1 className="font-display text-xl font-bold text-gold-100">{user?.firstName || user?.email}</h1>
           <p className="text-sm text-gold-100/50">{t('profile.id')}: {user?.id}</p>
@@ -77,7 +101,9 @@ export default function ProfilePage() {
         </div>
         <div className="ml-auto text-right">
           <p className="text-xs text-gold-200/50">{t('common.balance')}</p>
-          <p className="font-display text-2xl font-bold text-gradient-gold">{formatMoney(user?.balance ?? 0, currency)}</p>
+          <p className="font-display text-2xl font-bold text-gradient-gold">
+            {formatMoney(user?.balance ?? 0, currency)}
+          </p>
         </div>
       </GlassCard>
 
@@ -119,7 +145,7 @@ export default function ProfilePage() {
   );
 }
 
-function TxList({ rows, t, currency }: { rows: any[]; t: (k: string) => string; currency: string }) {
+function TxList({ rows, t, currency }: { rows: TxRow[]; t: (k: string) => string; currency: string }) {
   if (!rows.length) return <p className="text-sm text-gold-100/40">—</p>;
   return (
     <div className="space-y-2.5">
@@ -138,7 +164,13 @@ function StatusBadge({ status, t }: { status: string; t: (k: string) => string }
   const map: Record<string, string> = {
     pending: 'bg-gold-500/15 text-gold-300',
     accepted: 'bg-emerald-500/15 text-emerald-400',
+    approved: 'bg-emerald-500/15 text-emerald-400',
+    completed: 'bg-emerald-500/15 text-emerald-400',
     rejected: 'bg-ruby-500/15 text-ruby-400',
   };
-  return <span className={`rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-wide ${map[status] ?? map.pending}`}>{t(`common.${status}`)}</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-wide ${map[status] ?? map.pending}`}>
+      {t(`common.${status}`) || status}
+    </span>
+  );
 }
