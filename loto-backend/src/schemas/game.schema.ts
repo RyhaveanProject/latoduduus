@@ -21,7 +21,6 @@ export class Game {
   @Prop({ default: 0 })
   currentDrawIndex!: number;
 
-  // Əvvəl düzəltdiyimiz sahə
   @Prop({ type: Number, default: null })
   currentNumber?: number | null;
 
@@ -43,9 +42,11 @@ export class Game {
   @Prop()
   winnerId?: string;
 
-  // Hazırkı xətanın səbəbi olan sahə (Düzəldilib)
   @Prop({ type: String, enum: ['real', 'bot'], default: null })
   winnerType?: 'real' | 'bot' | null;
+
+  @Prop()
+  winnerName?: string;
 
   @Prop()
   winnerTicketId?: string;
