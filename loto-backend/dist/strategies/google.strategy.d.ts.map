@@ -1,0 +1,1 @@
+{"version":3,"file":"google.strategy.d.ts","sourceRoot":"","sources":["../../src/strategies/google.strategy.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,aAAa,EAAE,MAAM,gBAAgB,CAAC;;AAE/C,qBACa,cAAe,SAAQ,mBAAoC;gBAC1D,aAAa,EAAE,aAAa;IAYlC,QAAQ,CACZ,WAAW,EAAE,MAAM,EACnB,YAAY,EAAE,MAAM,EACpB,OAAO,EAAE,GAAG,EACZ,IAAI,EAAE,GAAG,GACR,OAAO,CAAC,IAAI,CAAC;CAajB"}
