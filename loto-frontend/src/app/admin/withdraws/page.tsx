@@ -1,7 +1,9 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
+import { Button } from '@/components/Button';
 import { AdminAPI } from '@/lib/api';
+import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/utils';
 
 interface WithdrawRow {
@@ -25,15 +27,53 @@ interface WithdrawHistoryResponse {
 }
 
 export default function AdminWithdrawsPage() {
+  const { push } = useToast();
   const [rows, setRows] = useState<WithdrawRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     AdminAPI.withdrawsHistory()
       .then((res) => setRows(Array.isArray((res as WithdrawHistoryResponse)?.withdraws) ? (res as WithdrawHistoryResponse).withdraws : []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const approve = async (withdrawId: string) => {
+    setBusyId(withdrawId);
+    try {
+      await AdminAPI.approveWithdraw(withdrawId);
+      push('Withdraw approved', 'success');
+      await Promise.resolve(load());
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not approve withdraw', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const reject = async (withdrawId: string) => {
+    const reason = window.prompt('Rejection reason', 'Withdrawal details are invalid')?.trim();
+    if (!reason) return;
+
+    setBusyId(withdrawId);
+    try {
+      await AdminAPI.rejectWithdraw(withdrawId, reason);
+      push('Withdraw rejected', 'success');
+      await Promise.resolve(load());
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not reject withdraw', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -48,13 +88,14 @@ export default function AdminWithdrawsPage() {
               <th className="px-5 py-3">Date</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3">Details</th>
+              <th className="px-5 py-3 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="px-5 py-6 text-gold-100/40">Loading...</td></tr>
+              <tr><td colSpan={7} className="px-5 py-6 text-gold-100/40">Loading...</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-6 text-gold-100/40">No withdraws found</td></tr>
+              <tr><td colSpan={7} className="px-5 py-6 text-gold-100/40">No withdraws found</td></tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id} className="border-b border-white/5 align-top">
@@ -73,6 +114,16 @@ export default function AdminWithdrawsPage() {
                     {r.walletAddress && <div>Wallet: {r.walletAddress}</div>}
                     {r.approvedAt && <div>Approved: {new Date(r.approvedAt).toLocaleString()}</div>}
                     {r.rejectionReason && <div className="text-ruby-300">{r.rejectionReason}</div>}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {r.status === 'pending' ? (
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" loading={busyId === r.id} onClick={() => approve(r.id)}>Approve</Button>
+                        <Button size="sm" variant="danger" loading={busyId === r.id} onClick={() => reject(r.id)}>Reject</Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gold-100/35">Completed</span>
+                    )}
                   </td>
                 </tr>
               ))
