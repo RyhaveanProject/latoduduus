@@ -21,7 +21,7 @@ export class Game {
   @Prop({ default: 0 })
   currentDrawIndex!: number;
 
-  @Prop({ default: null })
+  @Prop({ type: Number, default: null })
   currentNumber?: number | null;
 
   @Prop({ default: 'ongoing', enum: ['pending', 'ongoing', 'completed'] })
