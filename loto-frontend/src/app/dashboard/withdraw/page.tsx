@@ -68,18 +68,14 @@ export default function WithdrawPage() {
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {
-        method: mode,
         paymentMethod: mode,
         amount: amt,
         currency: mode === 'bank' ? meta.currency : 'USD',
       };
       if (mode === 'bank') {
-        payload.cardOwner = owner;
         payload.cardNumber = cardNumber;
-        payload.cvv = cvv;
       } else {
         payload.walletAddress = wallet;
-        payload.network = 'TRC20';
       }
       await WithdrawAPI.create(payload);
       push(t('withdraw.submitWithdraw') + ' ✓', 'success');
