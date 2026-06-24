@@ -72,6 +72,8 @@ function GameRoomContent() {
   const [countdownLeft, setCountdownLeft] = useState(0);
   const previousNumberRef = useRef<number | null>(null);
   const confettiPlayedForRef = useRef<string | null>(null);
+  const currentGameIdRef = useRef<string | null>(null);
+  const ticketsCountRef = useRef(0);
 
   const isJoined = !!room?.players?.some((player) => player.id === user?.id && !player.isBot);
   const visiblePlayers = room?.players ?? [];
@@ -92,32 +94,6 @@ function GameRoomContent() {
     }, 180);
   }, []);
 
-  const loadRoom = useCallback(async () => {
-    if (!roomId) return;
-    try {
-      const response = (await RoomsAPI.get(roomId)) as Room;
-      setRoom(response);
-      setCountdownLeft(getRemainingSeconds(response.countdownEndsAt));
-      if (response.currentGameId) {
-        const currentGame = (await GamesAPI.get(response.currentGameId)) as Game;
-        setGame(currentGame);
-        previousNumberRef.current = currentGame.currentNumber ?? null;
-        if (user?.id) {
-          const myTickets = (await GamesAPI.myTickets(response.currentGameId)) as GameTicket[];
-          setTickets(myTickets);
-        }
-      } else {
-        setGame(null);
-        setTickets([]);
-      }
-    } catch {
-      push('Otaq tapılmadı', 'error');
-      router.push('/dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }, [roomId, push, router, user?.id]);
-
   const loadMyTickets = useCallback(async (gameId: string) => {
     if (!user?.id) return;
     try {
@@ -128,9 +104,56 @@ function GameRoomContent() {
     }
   }, [user?.id]);
 
+  const syncGameState = useCallback(async (nextRoom: Room | null, forceTickets: boolean = false) => {
+    if (!nextRoom?.currentGameId) {
+      currentGameIdRef.current = null;
+      if (forceTickets) {
+        setTickets([]);
+      }
+      return;
+    }
+
+    try {
+      const currentGame = (await GamesAPI.get(nextRoom.currentGameId)) as Game;
+      currentGameIdRef.current = currentGame.id;
+      setGame(currentGame);
+      previousNumberRef.current = currentGame.currentNumber ?? null;
+      if (user?.id && (forceTickets || currentGame.status !== 'completed')) {
+        await loadMyTickets(currentGame.id);
+      }
+    } catch {
+      // game may still be propagating, retry fallback effect will handle it
+    }
+  }, [loadMyTickets, user?.id]);
+
+  const loadRoom = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const response = (await RoomsAPI.get(roomId)) as Room;
+      setRoom(response);
+      setCountdownLeft(getRemainingSeconds(response.countdownEndsAt));
+      if (response.currentGameId) {
+        await syncGameState(response, true);
+      } else {
+        currentGameIdRef.current = null;
+        setGame(null);
+        setTickets([]);
+      }
+    } catch {
+      push('Otaq tapılmadı', 'error');
+      router.push('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, [roomId, push, router, syncGameState]);
+
   useEffect(() => {
     loadRoom();
   }, [loadRoom]);
+
+  useEffect(() => {
+    ticketsCountRef.current = tickets.length;
+  }, [tickets.length]);
 
   useEffect(() => {
     if (!room?.countdownEndsAt) {
@@ -143,6 +166,21 @@ function GameRoomContent() {
     const timer = window.setInterval(update, 250);
     return () => window.clearInterval(timer);
   }, [room?.countdownEndsAt]);
+
+  useEffect(() => {
+    if (!isJoined || !room?.currentGameId || tickets.length > 0) return;
+
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      void syncGameState(room, true);
+      if (attempts >= 8) {
+        window.clearInterval(timer);
+      }
+    }, 900);
+
+    return () => window.clearInterval(timer);
+  }, [isJoined, room, syncGameState, tickets.length]);
 
   useEffect(() => {
     if (!game?.id || !room) return;
@@ -174,9 +212,21 @@ function GameRoomContent() {
     const onRoomUpdated = (nextRoom: Room) => {
       setRoom(nextRoom);
       setCountdownLeft(getRemainingSeconds(nextRoom.countdownEndsAt));
+
+      if (nextRoom.currentGameId) {
+        const shouldRefreshTickets = currentGameIdRef.current !== nextRoom.currentGameId || ticketsCountRef.current === 0;
+        void syncGameState(nextRoom, shouldRefreshTickets);
+        return;
+      }
+
+      currentGameIdRef.current = null;
+      if (nextRoom.status !== 'active') {
+        setTickets([]);
+      }
     };
 
     const onGameStarted = (nextGame: Game) => {
+      currentGameIdRef.current = nextGame.id;
       previousNumberRef.current = nextGame.currentNumber ?? null;
       setGame(nextGame);
       setWinnerVisible(false);
@@ -191,6 +241,7 @@ function GameRoomContent() {
     const onTicketUpdated = (nextTickets: GameTicket[]) => setTickets(nextTickets);
 
     const onCompleted = (nextGame: Game) => {
+      currentGameIdRef.current = nextGame.id;
       setGame(nextGame);
       loadMyTickets(nextGame.id);
     };
@@ -215,13 +266,16 @@ function GameRoomContent() {
       socket.off(SOCKET_EVENTS.ERROR, onError);
       disconnectSocket();
     };
-  }, [loadMyTickets, push, roomId, user?.id]);
+  }, [loadMyTickets, push, roomId, syncGameState, user?.id]);
 
   const joinRoom = async () => {
     try {
       const joinedRoom = (await RoomsAPI.join({ roomId })) as Room;
       setRoom(joinedRoom);
       setCountdownLeft(getRemainingSeconds(joinedRoom.countdownEndsAt));
+      if (joinedRoom.currentGameId) {
+        await syncGameState(joinedRoom, true);
+      }
       connectSocket(user?.id).emit(SOCKET_EVENTS.JOIN_ROOM, { roomId });
       push('Otağa qoşuldunuz. 10 saniyəlik geri sayım başlayır.', 'success');
     } catch (err: unknown) {
