@@ -8,6 +8,8 @@ import { Deposit, DepositSchema } from '../../schemas/deposit.schema';
 import { Withdraw, WithdrawSchema } from '../../schemas/withdraw.schema';
 import { BotLog, BotLogSchema } from '../../schemas/bot-log.schema';
 import { Transaction, TransactionSchema } from '../../schemas/transaction.schema';
+import { Room, RoomSchema } from '../../schemas/room.schema';
+import { Game, GameSchema } from '../../schemas/game.schema';
 import { DepositsModule } from '../deposits/deposits.module';
 
 @Module({
@@ -20,6 +22,8 @@ import { DepositsModule } from '../deposits/deposits.module';
       { name: Withdraw.name, schema: WithdrawSchema },
       { name: BotLog.name, schema: BotLogSchema },
       { name: Transaction.name, schema: TransactionSchema },
+      { name: Room.name, schema: RoomSchema },
+      { name: Game.name, schema: GameSchema },
     ]),
   ],
   controllers: [AdminController],
