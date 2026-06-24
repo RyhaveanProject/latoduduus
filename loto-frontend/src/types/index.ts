@@ -126,6 +126,8 @@ export interface AdminStats {
   pendingDeposits: number;
   pendingWithdraws: number;
   bannedUsers: number;
+  totalRooms?: number;
+  activeRooms?: number;
 }
 
 export interface AdminUserListResponse {
