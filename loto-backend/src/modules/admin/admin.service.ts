@@ -13,6 +13,8 @@ import { Deposit, DepositDocument } from '../../schemas/deposit.schema';
 import { Withdraw, WithdrawDocument } from '../../schemas/withdraw.schema';
 import { BotLog, BotLogDocument } from '../../schemas/bot-log.schema';
 import { Transaction, TransactionDocument } from '../../schemas/transaction.schema';
+import { Room, RoomDocument } from '../../schemas/room.schema';
+import { Game, GameDocument } from '../../schemas/game.schema';
 import {
   CreateAdminDto,
   UpdateAdminDto,
@@ -34,6 +36,8 @@ export class AdminService {
     @InjectModel(Withdraw.name) private withdrawModel: Model<WithdrawDocument>,
     @InjectModel(BotLog.name) private botLogModel: Model<BotLogDocument>,
     @InjectModel(Transaction.name) private transactionModel: Model<TransactionDocument>,
+    @InjectModel(Room.name) private roomModel: Model<RoomDocument>,
+    @InjectModel(Game.name) private gameModel: Model<GameDocument>,
     private depositsService: DepositsService,
     private withdrawService: WithdrawService,
   ) {}
@@ -160,6 +164,9 @@ export class AdminService {
     const totalWithdraws = await this.withdrawModel.countDocuments();
     const pendingDeposits = await this.depositModel.countDocuments({ status: 'pending' });
     const pendingWithdraws = await this.withdrawModel.countDocuments({ status: 'pending' });
+    const totalRooms = await this.roomModel.countDocuments();
+    const activeRooms = await this.roomModel.countDocuments({ status: { $in: ['countdown', 'active'] } });
+    const totalActiveGames = await this.gameModel.countDocuments({ status: { $in: ['pending', 'ongoing'] } });
 
     const approvedDepositsData = await this.depositModel.aggregate([
       { $match: { status: 'approved' } },
@@ -176,15 +183,15 @@ export class AdminService {
 
     return {
       totalUsers,
-      totalActiveGames: 0,
+      totalActiveGames,
       totalRevenue,
       totalDeposits,
       totalWithdraws,
       pendingDeposits,
       pendingWithdraws,
       bannedUsers,
-      totalRooms: 0,
-      activeRooms: 0,
+      totalRooms,
+      activeRooms,
     };
   }
 
