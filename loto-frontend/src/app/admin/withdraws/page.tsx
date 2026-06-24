@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { AdminAPI } from '@/lib/api';
 import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/utils';
+import { IconHistory } from '@/components/icons';
 
 interface WithdrawRow {
   id: string;
@@ -32,12 +33,16 @@ export default function AdminWithdrawsPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    AdminAPI.withdrawsHistory()
-      .then((res) => setRows(Array.isArray((res as WithdrawHistoryResponse)?.withdraws) ? (res as WithdrawHistoryResponse).withdraws : []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
+    try {
+      const res = (await AdminAPI.withdrawsHistory()) as WithdrawHistoryResponse;
+      setRows(Array.isArray(res?.withdraws) ? res.withdraws : []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -49,7 +54,7 @@ export default function AdminWithdrawsPage() {
     try {
       await AdminAPI.approveWithdraw(withdrawId);
       push('Withdraw approved', 'success');
-      await Promise.resolve(load());
+      await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not approve withdraw', 'error');
@@ -66,7 +71,7 @@ export default function AdminWithdrawsPage() {
     try {
       await AdminAPI.rejectWithdraw(withdrawId, reason);
       push('Withdraw rejected', 'success');
-      await Promise.resolve(load());
+      await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not reject withdraw', 'error');
@@ -77,9 +82,18 @@ export default function AdminWithdrawsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="font-display text-xl font-bold text-gold-100">Withdraws</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-xl font-bold text-gold-100">Withdraws</h1>
+          <p className="text-sm text-gold-100/45">Çıxarış sorğularını kart və ya cüzdan məlumatı ilə birlikdə idarə et.</p>
+        </div>
+        <Button variant="secondary" icon={<IconHistory className="h-4 w-4" />} onClick={load}>
+          Refresh list
+        </Button>
+      </div>
+
       <GlassCard className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[1020px] text-sm">
           <thead>
             <tr className="border-b border-white/5 text-left text-xs uppercase tracking-wide text-gold-200/40">
               <th className="px-5 py-3">User</th>
@@ -87,7 +101,7 @@ export default function AdminWithdrawsPage() {
               <th className="px-5 py-3">Method</th>
               <th className="px-5 py-3">Date</th>
               <th className="px-5 py-3">Status</th>
-              <th className="px-5 py-3">Details</th>
+              <th className="px-5 py-3">Payout details</th>
               <th className="px-5 py-3 text-right">Action</th>
             </tr>
           </thead>
@@ -112,14 +126,14 @@ export default function AdminWithdrawsPage() {
                   <td className="px-5 py-3 text-xs text-gold-100/55">
                     {r.cardNumber && <div>Card: {r.cardNumber}</div>}
                     {r.walletAddress && <div>Wallet: {r.walletAddress}</div>}
-                    {r.approvedAt && <div>Approved: {new Date(r.approvedAt).toLocaleString()}</div>}
-                    {r.rejectionReason && <div className="text-ruby-300">{r.rejectionReason}</div>}
+                    {r.approvedAt && <div className="mt-1">Approved: {new Date(r.approvedAt).toLocaleString()}</div>}
+                    {r.rejectionReason && <div className="mt-1 text-ruby-300">{r.rejectionReason}</div>}
                   </td>
                   <td className="px-5 py-3 text-right">
                     {r.status === 'pending' ? (
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" loading={busyId === r.id} onClick={() => approve(r.id)}>Approve</Button>
-                        <Button size="sm" variant="danger" loading={busyId === r.id} onClick={() => reject(r.id)}>Reject</Button>
+                        <Button size="sm" loading={busyId === r.id} onClick={() => approve(r.id)}>Approve withdraw</Button>
+                        <Button size="sm" variant="danger" loading={busyId === r.id} onClick={() => reject(r.id)}>Reject withdraw</Button>
                       </div>
                     ) : (
                       <span className="text-xs text-gold-100/35">Completed</span>
