@@ -6,7 +6,7 @@ import { Button } from '@/components/Button';
 import { AdminAPI } from '@/lib/api';
 import { AdminListItem, AdminListResponse } from '@/types';
 import { useToast } from '@/components/Toast';
-import { IconPlus, IconShield } from '@/components/icons';
+import { IconPlus, IconShield, IconHistory } from '@/components/icons';
 
 const DEFAULT_PERMISSIONS = ['view_users', 'manage_users', 'manage_deposits', 'manage_withdraws'];
 
@@ -15,6 +15,7 @@ export default function AdminAdminsPage() {
   const [admins, setAdmins] = useState<AdminListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -58,9 +59,31 @@ export default function AdminAdminsPage() {
     }
   };
 
+  const toggleAdminStatus = async (admin: AdminListItem) => {
+    setBusyId(admin.id);
+    try {
+      const updated = (await AdminAPI.updateAdmin(admin.id, { isActive: !admin.isActive })) as AdminListItem;
+      setAdmins((list) => list.map((item) => (item.id === admin.id ? { ...item, isActive: updated.isActive } : item)));
+      push(updated.isActive ? 'Admin activated' : 'Admin disabled', 'success');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      push(Array.isArray(msg) ? msg.join(', ') : msg || 'Could not update admin', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-xl font-bold text-gold-100">Admins</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-xl font-bold text-gold-100">Admins</h1>
+          <p className="text-sm text-gold-100/45">Yeni admin yarat və mövcud admin hesablarını aktiv/passiv et.</p>
+        </div>
+        <Button variant="secondary" icon={<IconHistory className="h-4 w-4" />} onClick={loadAdmins}>
+          Refresh list
+        </Button>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_1fr]">
         <GlassCard className="p-6">
@@ -84,7 +107,7 @@ export default function AdminAdminsPage() {
         </GlassCard>
 
         <GlassCard className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[880px] text-sm">
             <thead>
               <tr className="border-b border-white/5 text-left text-xs uppercase tracking-wide text-gold-200/40">
                 <th className="px-5 py-3">Admin</th>
@@ -92,13 +115,14 @@ export default function AdminAdminsPage() {
                 <th className="px-5 py-3">Status</th>
                 <th className="px-5 py-3">Permissions</th>
                 <th className="px-5 py-3">Created</th>
+                <th className="px-5 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-5 py-6 text-gold-100/40">Loading...</td></tr>
+                <tr><td colSpan={6} className="px-5 py-6 text-gold-100/40">Loading...</td></tr>
               ) : admins.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-6 text-gold-100/40">No admins found</td></tr>
+                <tr><td colSpan={6} className="px-5 py-6 text-gold-100/40">No admins found</td></tr>
               ) : (
                 admins.map((admin) => (
                   <tr key={admin.id} className="border-b border-white/5 align-top">
@@ -121,6 +145,20 @@ export default function AdminAdminsPage() {
                     </td>
                     <td className="px-5 py-3 text-xs text-gold-100/55">{admin.permissions.join(', ') || '—'}</td>
                     <td className="px-5 py-3 text-gold-100/40">{admin.createdAt ? new Date(admin.createdAt).toLocaleString() : '—'}</td>
+                    <td className="px-5 py-3 text-right">
+                      {!admin.isSuperAdmin ? (
+                        <Button
+                          size="sm"
+                          variant={admin.isActive ? 'danger' : 'secondary'}
+                          loading={busyId === admin.id}
+                          onClick={() => toggleAdminStatus(admin)}
+                        >
+                          {admin.isActive ? 'Disable admin' : 'Activate admin'}
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-gold-100/35">Protected</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
